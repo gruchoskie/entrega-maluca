@@ -68,8 +68,6 @@ export class Caos {
   private extras: { obj: THREE.Object3D; corpo?: RAPIER.RigidBody }[] = [];
   private intensidade = 0; // 0..1: transição suave da chuva
   private cooldownBuraco = 0;
-  private corNevoa = new THREE.Color('#cfeeff');
-  private corChuva = new THREE.Color('#8f9fb4');
 
   constructor(
     private fis: Fisica,
@@ -177,13 +175,8 @@ export class Caos {
     const ev = this.atual;
     const alvo = ev?.tipo === 'chuva' ? 1 : 0;
     this.intensidade += (alvo - this.intensidade) * (1 - Math.exp(-2 * dt));
-    // Chuva escurece e fecha a névoa
-    const f = this.intensidade;
-    this.mundo.sol.intensity = 2.0 - 1.0 * f;
-    this.mundo.hemi.intensity = 1.15 - 0.3 * f;
-    const nevoa = this.mundo.cena.fog as THREE.Fog;
-    nevoa.color.copy(this.corNevoa).lerp(this.corChuva, f);
-    nevoa.far = 300 - 140 * f;
+    // A chuva escurece e fecha a névoa: quem aplica isso é o mundo (junto com o ciclo dia/noite)
+    this.mundo.chuva = this.intensidade;
     if (this.chuva.obj.visible) this.chuva.atualizar(dt, camPos);
     if (this.vento.obj.visible) this.vento.atualizar(dt, camPos);
 

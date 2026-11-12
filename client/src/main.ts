@@ -2,16 +2,18 @@
 // Três modos: equipe (pedidos compartilhados), individual (pedidos de cada um) e van (todos no mesmo carro, com papéis).
 import * as THREE from 'three';
 import { posicaoLargada } from '../../shared/constantes';
-import { PONTOS_COLETA, PONTOS_ENTREGA } from '../../shared/cidade';
-import type { Fase, JogoTick, Modo, Papel, PerfilMsg, SalaInfo } from '../../shared/protocolo';
+import { PONTOS_COLETA, PONTOS_ENTREGA, coordenada } from '../../shared/cidade';
+import { EMOTES, type Fase, type JogoTick, type Modo, type Papel, type PerfilMsg, type SalaInfo } from '../../shared/protocolo';
 import { Motor, buzinar, destravarAudio } from './audio/audio';
 import { efeito, iniciarMusica } from './audio/efeitos';
+import { Bolhas } from './efeitos/bolhas';
 import { Particulas } from './efeitos/particulas';
 import { Fisica } from './fisica/fisica';
 import { Marcadores, PacotesVisuais, Seta } from './jogo/pacotes';
 import { Controles, type EstadoControles } from './interface/controles';
 import { Hud, INFO_PAPEL, fmtDin, type CtxHud } from './interface/hud';
 import { Minimapa } from './interface/minimapa';
+import { aoEntregar, aoTerminar, desbloquear } from './interface/progresso';
 import {
   MonitorFps, QUALIDADES, piorQualidade, proximaQualidade, qualidadeInicial, salvarQualidade, type Qualidade,
 } from './interface/qualidade';
@@ -20,8 +22,10 @@ import { CameraSeguidora } from './mundo/camera';
 import { Caos } from './mundo/caos';
 import { criarCenario } from './mundo/cenario';
 import { Transito } from './mundo/transito';
-import { criarMundo } from './mundo/mundo';
+import { CICLO_DIA_S, criarMundo } from './mundo/mundo';
+import { rotaPelasRuas } from './mundo/rotas';
 import { Rede } from './rede/rede';
+import { Voz } from './rede/voz';
 import { OFFSET_CARGA } from './veiculo/modelos';
 import { Pedestre } from './veiculo/pedestre';
 import { Veiculo } from './veiculo/veiculo';
@@ -55,13 +59,25 @@ async function iniciar() {
   const pacotesVis = new PacotesVisuais(mundo.cena);
   const marcadores = new Marcadores(mundo.cena);
   const seta = new Seta(mundo.cena);
+  const bolhas = new Bolhas();
   const minimapa = new Minimapa();
   minimapa.visivel(false);
+  let mostrarRota = false; // rota sugerida no minimapa (clique no mapa liga/desliga)
+  minimapa.aoClicar = () => {
+    mostrarRota = !mostrarRota;
+    ui.aviso(mostrarRota ? '🧭 Rota sugerida ligada' : 'Rota sugerida desligada');
+  };
   // Relógio do servidor (estimado): trânsito e eventos ficam iguais para todos
   let desvioRelogio = 0;
   const agoraServidor = () => Date.now() + desvioRelogio;
   const transito = new Transito(fisica, mundo.cena, () => agoraServidor() / 1000);
   const caos = new Caos(fisica, mundo, transito);
+
+  // Faróis do meu veículo (acendem à noite)
+  const farol = new THREE.SpotLight('#fff2c8', 0, 55, 0.55, 0.6, 1.2);
+  farol.target.position.set(0, 0.3, 14);
+  farol.position.set(0, 0.6, 1.3);
+  mundo.aoNoite.push((n) => (farol.intensity = n * 90));
 
   // ---------- Estado da partida ----------
   let veiculo: Veiculo | null = null; // meu veículo (no modo van, só o motorista tem)
@@ -101,6 +117,7 @@ async function iniciar() {
     const l = posicaoLargada(slot);
     veiculo = new Veiculo(fisica, eu.veic, eu.cor, l.x, l.z, l.yaw, eu.chapeu);
     mundo.cena.add(veiculo.objeto);
+    veiculo.objeto.add(farol, farol.target);
     // Batidas e balanço: o servidor decide o estrago nos pacotes (do veículo, ou da van)
     veiculo.aoImpacto = (g) => {
       if (emVan() || minhasCargas().length) rede.enviar({ t: 'impacto', g });
@@ -200,6 +217,14 @@ async function iniciar() {
     if (r && alvo) buzinar(r.info.buzina, volumeDistancia(r.grupo.position, alvo.pos, 70));
   });
 
+  // Emotes e frases rápidas: balão sobre o jogador (ou sobre a van, se ele está dentro dela)
+  rede.em('emote', (m) => {
+    const pai = objetoDe(m.id);
+    if (pai) bolhas.mostrar(pai, m.k);
+  });
+  rede.em('voz', (m) => void voz.receber(m.de, m.dados));
+  rede.em('salas', (m) => ui.mostrarSalas(m.lista));
+
   rede.em('tick', (m) => {
     m.ids.forEach((id, i) => {
       if (id === meuId) meuAPe = m.j[i][11] === 1;
@@ -247,6 +272,18 @@ async function iniciar() {
       hud.popup(`+${fmtDin(m.v ?? 0)}`, '#ffe14d');
       particulas.confete(m.x, m.y, m.z);
       efeito('moeda');
+      if (meu) for (const c of aoEntregar(m.w ?? 0, m.tp, caos.atual?.tipo === 'chuva')) anunciarConquista(c.icone, c.nome);
+    } else if (m.k === 'explodiu') {
+      hud.popup('💥 BOOM! O gás explodiu!', '#ffb36b');
+      particulas.faiscas(m.x, m.y, m.z, 30);
+      camera.tremer(0.6);
+      efeito('batida', 1);
+    } else if (m.k === 'esfriou') {
+      hud.popup('🧊 A pizza esfriou!', '#bfe6ff');
+      efeito('perdido');
+    } else if (m.k === 'fugiu') {
+      hud.popup('🐶 O pet fugiu! Pegue de volta (E)', '#ffe0a8');
+      efeito('pegar', 0.6);
     } else if (m.k === 'quebrou') {
       hud.popup('💥 Pacote quebrou!', '#ff8a8a');
       particulas.faiscas(m.x, m.y, m.z, 16);
@@ -267,8 +304,65 @@ async function iniciar() {
   });
 
   rede.em('resultado', (m) => {
-    hud.mostrarResultado(m.r, meuId === sala?.anfitriao, () => rede.enviar({ t: 'voltar' }));
+    // XP, recorde e conquistas desta partida (guardados neste navegador)
+    const p = aoTerminar(m.r, meuId, m.r.modo);
+    for (const c of p.novas) anunciarConquista(c.icone, c.nome);
+    const extra = `<div class="destaque xp">⭐ <span>+${p.xpGanho} XP · Nível ${p.nivel}${p.recorde ? ' · 🎉 NOVO RECORDE de dinheiro!' : ''}</span></div>`;
+    hud.mostrarResultado(
+      m.r,
+      meuId === sala?.anfitriao,
+      () => rede.enviar({ t: 'voltar' }),
+      () => {
+        // "Jogar de novo": volta ao lobby e já inicia com as mesmas configurações
+        rede.enviar({ t: 'voltar' });
+        rede.enviar({ t: 'iniciar' });
+      },
+      extra,
+    );
   });
+
+  function anunciarConquista(icone: string, nome: string) {
+    hud.popup(`${icone} ${nome}`, '#ffe14d');
+    ui.aviso(`🏆 Conquista: ${nome}`);
+    efeito('moeda');
+  }
+
+  // ---------- Voz por proximidade e balões ----------
+  /** Posição de um jogador no mundo (quem está dentro da van fica na posição da van). */
+  function posDeJogador(id: string): THREE.Vector3 | null {
+    if (id === meuId) return alvoCamera()?.pos ?? null;
+    const r = remotos.get(id);
+    if (!r) return null;
+    if (emVan() && !r.aPe && !(papeisDe.get(id) ?? []).includes('motorista')) return posVan()?.pos ?? null;
+    return r.grupo.position;
+  }
+  const voz = new Voz(
+    (para, dados) => rede.enviar({ t: 'voz', para, dados }),
+    posDeJogador,
+    () => alvoCamera()?.pos ?? null,
+  );
+  ui.aoMic = async () => {
+    if (voz.micLigado) {
+      voz.desligarMic();
+      return false;
+    }
+    const ok = await voz.ligarMic();
+    if (ok) ui.aviso('🎙️ Microfone ligado: só quem está perto ouve você');
+    else ui.aviso('Não consegui acessar o microfone (permissão negada?)');
+    return ok;
+  };
+  ui.aoEmote = (k) => rede.enviar({ t: 'emote', k });
+
+  /** Objeto 3D onde o balão de fala deve aparecer. */
+  function objetoDe(id: string): THREE.Object3D | null {
+    const aPeDono = id === meuId ? !!pedestre : !!remotos.get(id)?.aPe;
+    if (emVan() && !aPeDono) {
+      const mot = sala?.jogadores.find((j) => (papeisDe.get(j.id) ?? []).includes('motorista'));
+      return veiculo?.objeto ?? (mot ? (remotos.get(mot.id)?.grupo ?? null) : null);
+    }
+    if (id === meuId) return pedestre?.objeto ?? veiculo?.objeto ?? null;
+    return remotos.get(id)?.grupo ?? null;
+  }
 
   // ---------- O que cada jogador pode ver ----------
   /** Pedidos visíveis para mim: individual = só os meus; van = ativos (e as ofertas, se eu for o gerente). */
@@ -340,24 +434,28 @@ async function iniciar() {
   }
 
   /** Para onde a seta aponta: entrega do que carrego, senão a coleta/pacote mais próximo. */
-  function alvoSeta() {
+  function calcularAlvo(porPapel: boolean) {
     const a = alvoCamera();
     if (!a || !jogoAtual || fase !== 'jogo' || jogoAtual.contagem > 0) return null;
-    if (emVan() && !tenho('entregador')) return null; // só o entregador usa a seta
+    if (porPapel && emVan() && !tenho('entregador')) return null; // só o entregador usa a seta
     const jv = jogoVisivel(jogoAtual);
     const p = a.pos;
-    let melhor: { x: number; z: number; cor: string } | null = null;
+    let melhor: { x: number; z: number; cor: string; nome: string; entrega: boolean } | null = null;
     let md = Infinity;
     const ped = (id: number) => jv.pedidos.find((x) => x.id === id);
-    const minhas = minhasCargas();
+    // No modo van o que importa é o que a VAN carrega (quem pegou é o entregador)
+    const minhas = emVan() ? jv.pacotes.filter((k) => k.estado === 'carregado') : minhasCargas();
     const candidatos = minhas.length
-      ? minhas.map((k) => ({ ...PONTOS_ENTREGA[ped(k.id)?.entrega ?? 0], cor: ped(k.id)?.cor ?? '#fff' }))
+      ? minhas.map((k) => {
+          const pt = PONTOS_ENTREGA[ped(k.id)?.entrega ?? 0];
+          return { x: pt.x, z: pt.z, cor: ped(k.id)?.cor ?? '#fff', nome: pt.nome, entrega: true };
+        })
       : jv.pacotes
           .filter((k) => k.estado !== 'carregado')
           .map((k) => {
             const pe = ped(k.id);
-            const ponto = k.estado === 'coleta' ? PONTOS_COLETA[pe?.coleta ?? 0] : { x: k.pos[0], z: k.pos[2] };
-            return { x: ponto.x, z: ponto.z, cor: pe?.cor ?? '#fff' };
+            const pt = k.estado === 'coleta' ? PONTOS_COLETA[pe?.coleta ?? 0] : { x: k.pos[0], z: k.pos[2], nome: 'pacote no chão' };
+            return { x: pt.x, z: pt.z, cor: pe?.cor ?? '#fff', nome: pt.nome, entrega: false };
           });
     for (const c of candidatos) {
       const d = Math.hypot(c.x - p.x, c.z - p.z);
@@ -367,6 +465,21 @@ async function iniciar() {
       }
     }
     return melhor;
+  }
+  const alvoSeta = () => calcularAlvo(true);
+
+  /** Dica falada para o navegador: direção relativa ao rumo da van e distância até o destino. */
+  function dicaNavegador(): string {
+    const a = alvoCamera();
+    const alvo = calcularAlvo(false);
+    if (!a || !alvo) return '';
+    const dx = alvo.x - a.pos.x;
+    const dz = alvo.z - a.pos.z;
+    let rel = Math.atan2(dx, dz) - a.rumo;
+    rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+    const dir =
+      Math.abs(rel) < 0.5 ? '⬆️ Siga em frente' : Math.abs(rel) > 2.6 ? '🔄 Faça o retorno' : rel < 0 ? '➡️ Vire à direita' : '⬅️ Vire à esquerda';
+    return `🧭 <b>${dir}</b> · ${Math.round(Math.hypot(dx, dz))} m até ${alvo.entrega ? '🏁' : '📦'} ${alvo.nome}<small>${coordenada(alvo.x, alvo.z)}</small>`;
   }
 
   /** Mostra/oculta o minimapa (e o botão de descer da van) conforme o modo e o papel. */
@@ -388,6 +501,7 @@ async function iniciar() {
     const antes = fase;
     fase = nova;
     hud.partidaVisivel(nova === 'jogo');
+    if (nova === 'jogo') mostrarRota = emVan() && tenho('navegador'); // o navegador já começa com a rota ligada
     if (nova === 'jogo') {
       hud.esconderResultado();
       voltarParaLargada();
@@ -415,6 +529,8 @@ async function iniciar() {
     papeisDe.clear();
     for (const j of s.jogadores) papeisDe.set(j.id, j.papeis);
     papeis = papeisDe.get(meuId) ?? [];
+    mundo.aplicarTema(s.mapa ?? 'cidade'); // todos veem o mesmo visual de mapa
+    voz.definirPares(meuId, s.jogadores.map((j) => j.id));
     const vanJogo = s.modo === 'van' && s.fase === 'jogo';
     ajustarEntidadesLocais(vanJogo);
 
@@ -471,6 +587,13 @@ async function iniciar() {
       void conectarE(() => rede.enviar({ t: 'entrar', codigo: codigo.toUpperCase(), ...perfilParaMsg(p) })),
   });
   ui.aoIniciar = () => rede.enviar({ t: 'iniciar' });
+  ui.aoConfig = (c) => rede.enviar({ t: 'config', ...c });
+  // Lista de salas públicas na tela inicial: conecta em silêncio e atualiza a cada poucos segundos
+  void rede.conectar().then(() => rede.enviar({ t: 'listar' })).catch(() => {});
+  const listaTimer = window.setInterval(() => {
+    if (!document.getElementById('tela-menu')) return clearInterval(listaTimer);
+    if (rede.conectado) rede.enviar({ t: 'listar' });
+  }, 4000);
   ui.aoModo = (m) => rede.enviar({ t: 'modo', modo: m });
   ui.aoComprar = (item) => rede.enviar({ t: 'comprar', item });
   hud.aoAceitar = (id) => rede.enviar({ t: 'aceitar', id });
@@ -517,6 +640,9 @@ async function iniciar() {
     const alvo = e.target as HTMLElement;
     if (alvo.tagName === 'INPUT') return;
     if (e.code === 'KeyR' && veiculo && !pedestre) voltarParaLargada();
+    // Emotes rápidos: teclas 7, 8, 9 e 0
+    const emoteIdx = ({ Digit7: 0, Digit8: 1, Digit9: 2, Digit0: 3 } as Record<string, number>)[e.code];
+    if (emoteIdx !== undefined && entrou) rede.enviar({ t: 'emote', k: EMOTES[emoteIdx] });
     // Gerente (modo van): teclas 1, 2 e 3 aceitam as ofertas da lista
     const n = ({ Digit1: 0, Digit2: 1, Digit3: 2 } as Record<string, number>)[e.code];
     if (n !== undefined && emVan() && tenho('gerente') && jogoAtual) {
@@ -545,6 +671,8 @@ async function iniciar() {
   let ctrl = controles.ler();
   let ultimoEnvio = 0;
   let ultimoMapa = 0;
+  let ultimaDica = 0;
+  let velocistaOk = false;
 
   function quadro(agora: number) {
     const dt = Math.min(0.05, (agora - anterior) / 1000); // limita saltos (aba em segundo plano)
@@ -589,7 +717,10 @@ async function iniciar() {
     const alvo = alvoCamera();
     pacotesVis.atualizar(dt, { alvoCarga });
     marcadores.atualizar(dt);
+    mundo.definirHora(agoraServidor() / 1000 / CICLO_DIA_S); // dia e noite iguais para todos
     mundo.atualizar(dt);
+    bolhas.atualizar(agora);
+    voz.atualizar(agora);
     transito.atualizarVisual();
     caos.atualizar(dt, veiculo, camera.camera.position);
     // Poeira de derrapagem nas rodas traseiras
@@ -609,7 +740,21 @@ async function iniciar() {
         carros: transito.posicoes(),
         jogo: jogoAtual ? jogoVisivel(jogoAtual) : null,
         meuId,
+        rota: mostrarRota && calcularAlvo(false) ? rotaPelasRuas({ x: alvo.pos.x, z: alvo.pos.z }, calcularAlvo(false)!) : null,
       });
+    }
+    // Dica falada do navegador + quem está falando no chat de voz (atualizadas poucas vezes por segundo)
+    if (agora - ultimaDica > 250) {
+      ultimaDica = agora;
+      hud.definirDica(emVan() && tenho('navegador') ? dicaNavegador() : '');
+      const nomes: string[] = [];
+      for (const id of voz.falando) nomes.push(id === meuId ? 'Você' : (sala?.jogadores.find((j) => j.id === id)?.nome ?? '?'));
+      hud.definirFalando(nomes);
+      if (alvo && Math.abs(alvo.vel) * 3.6 >= 100 && !velocistaOk) {
+        velocistaOk = true;
+        const c = desbloquear('velocista');
+        if (c) anunciarConquista(c.icone, c.nome);
+      }
     }
     seta.atualizar(dt, alvo?.pos ?? new THREE.Vector3(), alvoSeta());
 
@@ -656,7 +801,7 @@ async function iniciar() {
   if (import.meta.env.DEV) {
     Object.defineProperty(window, 'veiculo', { get: () => veiculo });
     Object.defineProperty(window, 'pedestre', { get: () => pedestre });
-    Object.assign(window, { fisica, remotos, rede, hud, caos, transito, sala: () => sala, INFO_PAPEL });
+    Object.assign(window, { fisica, remotos, rede, hud, caos, transito, sala: () => sala, INFO_PAPEL, PONTOS_COLETA, PONTOS_ENTREGA, mundo });
   }
 }
 
@@ -667,3 +812,8 @@ function volumeDistancia(a: THREE.Vector3, b: THREE.Vector3, alcance: number) {
 }
 
 void iniciar();
+
+// PWA: permite instalar o jogo como app (só na versão publicada)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}

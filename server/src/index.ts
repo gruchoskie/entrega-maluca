@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { TAXA_REDE } from '../../shared/constantes';
-import type { MsgCliente } from '../../shared/protocolo';
+import type { MsgCliente, SalaPublica } from '../../shared/protocolo';
 import { Sala, type Jogador } from './sala';
 
 const PORTA = Number(process.env.PORT ?? 2567);
@@ -24,7 +24,15 @@ const http = createServer((_req, res) => {
   res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
   res.end(`Entrega Maluca OK - ${salas.size} sala(s)`);
 });
-const wss = new WebSocketServer({ server: http, maxPayload: 4096 });
+const wss = new WebSocketServer({ server: http, maxPayload: 16384 }); // SDP do chat de voz pode passar de 4 KB
+
+/** Salas públicas abertas: no lobby, com vaga, marcadas como públicas pelo anfitrião. */
+function listaPublica(): SalaPublica[] {
+  return [...salas.values()]
+    .filter((s) => s.publica && s.fase === 'lobby' && !s.cheia)
+    .map((s) => ({ codigo: s.codigo, modo: s.modo, mapa: s.mapa, jogadores: s.jogadores.size }))
+    .slice(0, 12);
+}
 
 interface Conexao extends WebSocket {
   vivo?: boolean;
@@ -47,6 +55,7 @@ wss.on('connection', (ws: Conexao) => {
       return;
     }
     if (!m || typeof m.t !== 'string') return;
+    if (m.t === 'listar') return void ws.send(JSON.stringify({ t: 'salas', lista: listaPublica() }));
 
     // Ainda fora de sala: só aceita criar/entrar
     if (!sala || !jogador) {

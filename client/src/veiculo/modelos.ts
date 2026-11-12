@@ -27,6 +27,14 @@ export const CONFIGS: Record<TipoVeiculo, ConfigVeiculo> = {
     nome: 'Scooter', velMax: 22, aceleracao: 16, giro: 2.4, inclinacao: 0.45, molejo: 70, pulo: 8,
     massa: 120, caixa: [0.35, 0.5, 0.95], raioRoda: 0.32, zeta: 0.3, aderencia: 1,
   },
+  moto: {
+    nome: 'Moto', velMax: 26, aceleracao: 18, giro: 2.2, inclinacao: 0.55, molejo: 80, pulo: 8,
+    massa: 150, caixa: [0.32, 0.5, 1.0], raioRoda: 0.34, zeta: 0.28, aderencia: 0.95,
+  },
+  picape: {
+    nome: 'Picape', velMax: 20, aceleracao: 12, giro: 1.9, inclinacao: -0.1, molejo: 45, pulo: 7,
+    massa: 320, caixa: [0.85, 0.7, 1.5], raioRoda: 0.38, zeta: 0.38, aderencia: 0.95,
+  },
   van: {
     nome: 'Van', velMax: 17, aceleracao: 10, giro: 1.6, inclinacao: -0.16, molejo: 40, pulo: 6,
     massa: 400, caixa: [0.9, 0.8, 1.6], raioRoda: 0.4, zeta: 0.4, aderencia: 0.9,
@@ -276,6 +284,59 @@ export function criarModelo(tipo: TipoVeiculo, cor: string, chapeu: Chapeu = 'ne
     e.scale.setScalar(0.8);
     e.position.set(0.3, 0.55, 1.0);
     raiz.add(e);
+  } else if (tipo === 'moto') {
+    raioRoda = 0.34;
+    rodas.push(roda(raioRoda, 0.2, 0, 0.85), roda(raioRoda, 0.26, 0, -0.8));
+    const carenagem = malha(arred(0.46, 0.55, 0.3, 0.14), mat, 0, 0.9, 0.84);
+    carenagem.rotation.x = -0.25;
+    raiz.add(
+      malha(arred(0.36, 0.3, 1.3, 0.1), escura, 0, 0.58, -0.05), // chassi e motor
+      malha(arred(0.4, 0.34, 0.7, 0.14), mat, 0, 0.98, 0.18), // tanque
+      carenagem,
+      malha(arred(0.4, 0.1, 0.7, 0.05), matPreto, 0, 0.93, -0.55), // banco
+      malha(arred(0.3, 0.28, 0.5, 0.1), mat, 0, 0.82, -1.05), // rabeta
+      malha(arred(0.26, 0.07, 0.06, 0.02), brilho('#ff4a4a'), 0, 0.88, -1.31), // lanterna
+      malha(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 8).rotateZ(Math.PI / 2), matPreto, 0, 1.2, 0.68), // guidão
+      malha(new THREE.SphereGeometry(0.1, 12, 10), brilho('#fff6c0'), 0, 1.02, 0.98), // farol
+      malha(new THREE.CylinderGeometry(0.06, 0.07, 0.7, 8).rotateX(Math.PI / 2), matCinza, 0.22, 0.44, -0.7), // escapamento
+      malha(arred(0.3, 0.07, 0.6, 0.03), mat, 0, 0.74, 0.88), // paralama
+      malha(arred(0.52, 0.42, 0.52, 0.09), clara, 0, 1.24, -1.0), // baú pequeno
+      malha(arred(0.54, 0.1, 0.54, 0.04), mat, 0, 1.24, -1.0),
+    );
+    const e = entregador(c, chapeu, { mao: [0.46, 0.28, 0.96], pernas: 'sentado' });
+    e.position.set(0, 0.95, -0.28);
+    raiz.add(e);
+  } else if (tipo === 'picape') {
+    raioRoda = 0.38;
+    for (const x of [0.8, -0.8]) for (const z of [1.0, -1.0]) rodas.push(roda(raioRoda, 0.28, x, z));
+    raiz.add(
+      malha(arred(1.6, 0.7, 1.0, 0.2), mat, 0, 0.82, 0.8), // cabine (parte baixa, janelas abertas)
+      malha(arred(1.6, 0.12, 1.0, 0.05), mat, 0, 1.64, 0.8), // teto
+      malha(arred(1.55, 0.46, 0.6, 0.14), mat, 0, 0.68, 1.45), // capô
+      malha(arred(1.4, 0.5, 0.04, 0.015), matVidro, 0, 1.3, 1.3), // para-brisa
+      malha(arred(0.04, 0.5, 0.8, 0.015), matVidro, 0.79, 1.3, 0.8), // vidros laterais
+      malha(arred(0.04, 0.5, 0.8, 0.015), matVidro, -0.79, 1.3, 0.8),
+      malha(arred(1.7, 0.16, 0.2, 0.06), matCinza, 0, 0.42, 1.78), // para-choques
+      malha(arred(1.7, 0.16, 0.2, 0.06), matCinza, 0, 0.42, -1.65),
+      // caçamba aberta: piso, laterais e traseira
+      malha(arred(1.55, 0.12, 1.75, 0.04), escura, 0, 0.52, -0.8),
+      malha(arred(0.1, 0.45, 1.75, 0.04), mat, 0.76, 0.8, -0.8),
+      malha(arred(0.1, 0.45, 1.75, 0.04), mat, -0.76, 0.8, -0.8),
+      malha(arred(1.55, 0.45, 0.1, 0.04), mat, 0, 0.8, -1.6),
+      malha(arred(1.55, 0.45, 0.1, 0.04), mat, 0, 0.8, 0.07),
+      malha(arred(0.28, 0.1, 0.06, 0.02), brilho('#ff4a4a'), 0.6, 0.78, -1.66),
+      malha(arred(0.28, 0.1, 0.06, 0.02), brilho('#ff4a4a'), -0.6, 0.78, -1.66),
+      malha(arred(0.5, 0.2, 0.3, 0.07), lamb('#ffd23f'), 0, 1.8, 0.8), // letreiro
+    );
+    const faceOlhos = olhos(0.42, 0.74, 1.76, 0.2);
+    const sorriso = malha(new THREE.TorusGeometry(0.24, 0.035, 6, 18, Math.PI), matPreto, 0, 0.56, 1.81);
+    sorriso.rotation.z = Math.PI;
+    raiz.add(faceOlhos, sorriso);
+    for (const x of [-0.75, 0.75]) for (const z of [0.38, 1.22]) raiz.add(malha(new THREE.BoxGeometry(0.1, 0.56, 0.1), mat, x, 1.36, z));
+    const e = entregador(c, chapeu, { pernas: 'nenhuma' });
+    e.scale.setScalar(0.8);
+    e.position.set(0.3, 0.5, 0.8);
+    raiz.add(e);
   } else {
     raioRoda = 0.36;
     rodas.push(roda(raioRoda, 0.26, 0, 0.95), roda(0.2, 0.14, 0.42, -0.75), roda(0.2, 0.14, -0.42, -0.75));
@@ -318,18 +379,76 @@ export function criarModelo(tipo: TipoVeiculo, cor: string, chapeu: Chapeu = 'ne
 /** Entregador a pé (modo van): o mesmo personagem, sem veículo. Origem nos pés. */
 export function criarPedestre(cor: string, chapeu: Chapeu): THREE.Group {
   const g = new THREE.Group();
-  const e = entregador(new THREE.Color(cor), chapeu, { mao: [0.3, 0.1, 0.12], pernas: 'em-pe' });
+  const c = new THREE.Color(cor);
+  const e = entregador(c, chapeu, { pernas: 'nenhuma' }); // tronco, cabeça e chapéu (sem membros)
   e.position.y = 0.62;
+  const roupa = lamb(c);
+
+  // Braços e pernas articulados: o grupo fica no ombro/quadril e a animação gira em torno dele
+  const membro = (x: number, y: number, comp: number, raio: number, mat: THREE.Material, ponta: THREE.Object3D) => {
+    const m = new THREE.Group();
+    m.position.set(x, y, 0);
+    m.add(entre(V(0, 0, 0), V(0, -comp, 0), raio, mat));
+    ponta.position.y = -comp - 0.01;
+    m.add(ponta);
+    e.add(m);
+    return m;
+  };
+  const mao = () => malha(new THREE.SphereGeometry(0.1, 10, 8), matPele);
+  const sapato = () => malha(arred(0.17, 0.1, 0.3, 0.04), matPreto, 0, -0.03, 0.06);
+  const anim = {
+    bracoE: membro(0.27, 0.52, 0.44, 0.075, roupa, mao()),
+    bracoD: membro(-0.27, 0.52, 0.44, 0.075, roupa, mao()),
+    pernaE: membro(0.13, 0.12, 0.7, 0.09, matCalca, sapato()),
+    pernaD: membro(-0.13, 0.12, 0.7, 0.09, matCalca, sapato()),
+    raiz: e,
+  };
   e.traverse((o) => {
     if (o instanceof THREE.Mesh) o.castShadow = true;
   });
+  g.userData.anim = anim;
   g.add(e);
   return g;
+}
+
+/**
+ * Anima o entregador a pé: pernas e braços balançam em oposição, o corpo inclina e balança,
+ * pose de salto no ar e "respiração" parado.
+ * @param fase ângulo do passo (cresce ao andar)  @param rel 0..1 (velocidade relativa)
+ */
+export function animarPedestre(g: THREE.Group, fase: number, rel: number, noChao: boolean) {
+  const a = g.userData.anim as
+    | { bracoE: THREE.Group; bracoD: THREE.Group; pernaE: THREE.Group; pernaD: THREE.Group; raiz: THREE.Group }
+    | undefined;
+  if (!a) return;
+  if (!noChao) {
+    // No ar: braços para cima, pernas abertas
+    a.bracoE.rotation.x = a.bracoD.rotation.x = -2.4;
+    a.bracoE.rotation.z = -0.35;
+    a.bracoD.rotation.z = 0.35;
+    a.pernaE.rotation.x = 0.55;
+    a.pernaD.rotation.x = -0.35;
+    a.raiz.rotation.x = -0.06;
+    return;
+  }
+  const s = Math.sin(fase) * 0.95 * rel;
+  const resp = Math.sin(fase * 0.3) * (1 - rel);
+  a.pernaE.rotation.x = s;
+  a.pernaD.rotation.x = -s;
+  a.bracoE.rotation.x = -s * 0.9 + resp * 0.04;
+  a.bracoD.rotation.x = s * 0.9 + resp * 0.04;
+  a.bracoE.rotation.z = -0.05 - rel * 0.08;
+  a.bracoD.rotation.z = 0.05 + rel * 0.08;
+  a.raiz.rotation.x = rel * 0.14; // inclina para a frente
+  a.raiz.rotation.z = Math.sin(fase) * 0.07 * rel; // balança de um lado para o outro
+  a.raiz.position.y = 0.62 + Math.abs(Math.cos(fase)) * 0.07 * rel + resp * 0.012; // sobe e desce a cada passo
 }
 
 /** Onde o primeiro pacote se encaixa (coordenadas do modelo; origem no chão). */
 export const OFFSET_CARGA: Record<TipoVeiculo, [number, number, number]> = {
   scooter: [0, 1.8, -0.95],
+  moto: [0, 1.7, -1.0],
+  picape: [0, 1.15, -0.8],
   van: [0, 2.35, -0.45],
   carrinho: [0, 1.3, 0.35],
 };

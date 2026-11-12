@@ -4,11 +4,18 @@ import { MAX_JOGADORES, NIVEL_MAX, PRECO_BUZINA, PRECO_CHAPEU, PRECO_UPGRADE } f
 import { Jogo } from './jogo';
 import {
   BUZINAS,
+  DIFICULDADES,
+  DURACOES,
+  EMOTES,
+  FRASES,
+  MAPAS,
   CHAPEUS,
   MODOS,
   VEICULOS,
   type Buzina,
   type Chapeu,
+  type Dificuldade,
+  type Mapa,
   type Fase,
   type JogadorInfo,
   type MsgCliente,
@@ -62,7 +69,12 @@ export class Sala {
   cosmeticos: SalaInfo['cosmeticos'] = { chapeus: ['nenhum'], buzinas: ['padrao'] };
   jogo: Jogo | null = null;
   modo: Modo = 'equipe';
+  duracao = 360;
+  dificuldade: Dificuldade = 'normal';
+  mapa: Mapa = 'cidade';
+  publica = false;
   private ultimoTick = Date.now();
+  private ultimoEmote = new Map<string, number>();
 
   constructor(readonly codigo: string) {}
 
@@ -76,6 +88,10 @@ export class Sala {
       anfitriao: this.anfitriao,
       fase: this.fase,
       modo: this.modo,
+      duracao: this.duracao,
+      dificuldade: this.dificuldade,
+      mapa: this.mapa,
+      publica: this.publica,
       jogadores: [...this.jogadores.values()].map(({ id, nome, cor, veic, chapeu, buzina, slot, papeis }) => ({
         id, nome, cor, veic, chapeu, buzina, slot, papeis,
       })),
@@ -152,6 +168,30 @@ export class Sala {
           this.enviarSala();
         }
         break;
+      case 'config':
+        // Só o anfitrião, só no lobby; cada campo é validado
+        if (j.id === this.anfitriao && this.fase === 'lobby') {
+          if (typeof m.duracao === 'number' && DURACOES.includes(m.duracao)) this.duracao = m.duracao;
+          if (m.dificuldade && DIFICULDADES.includes(m.dificuldade)) this.dificuldade = m.dificuldade;
+          if (m.mapa && MAPAS.includes(m.mapa)) this.mapa = m.mapa;
+          if (typeof m.publica === 'boolean') this.publica = m.publica;
+          this.enviarSala();
+        }
+        break;
+      case 'emote': {
+        const agora = Date.now();
+        if (typeof m.k !== 'string' || !(EMOTES.includes(m.k) || FRASES.includes(m.k))) break;
+        if (agora - (this.ultimoEmote.get(j.id) ?? 0) < 700) break; // sem spam
+        this.ultimoEmote.set(j.id, agora);
+        this.enviarTodos({ t: 'emote', id: j.id, k: m.k });
+        break;
+      }
+      case 'voz': {
+        // Repassa a sinalização WebRTC só para outro jogador DA MESMA sala
+        const alvo = this.jogadores.get(String(m.para));
+        if (alvo && alvo.id !== j.id) this.enviar(alvo, { t: 'voz', de: j.id, dados: m.dados });
+        break;
+      }
       case 'iniciar':
         if (j.id === this.anfitriao && this.fase === 'lobby') {
           this.atribuirPapeis();

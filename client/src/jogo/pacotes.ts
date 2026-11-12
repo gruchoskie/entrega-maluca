@@ -8,13 +8,21 @@ export const NOME_PACOTE: Record<TipoPacote, string> = {
   pesado: 'Pesado',
   fragil: 'Frágil',
   liquido: 'Líquido',
+  pizza: 'Pizza',
+  gas: 'Gás',
+  pet: 'Pet',
 };
-export const ICONE_PACOTE: Record<TipoPacote, string> = { leve: '🎈', pesado: '🧱', fragil: '🥚', liquido: '💧' };
+export const ICONE_PACOTE: Record<TipoPacote, string> = {
+  leve: '🎈', pesado: '🧱', fragil: '🥚', liquido: '💧', pizza: '🍕', gas: '🔥', pet: '🐶',
+};
 export const DICA_PACOTE: Record<TipoPacote, string> = {
   leve: 'cai fácil em batidas',
   pesado: 'deixa o veículo lento',
   fragil: 'quebra com impacto forte',
   liquido: 'derrama em curvas bruscas',
+  pizza: 'esfria: entregue rápido!',
+  gas: 'EXPLODE com batidas!',
+  pet: 'pode fugir do carro',
 };
 
 const lamb = (cor: string) => new THREE.MeshLambertMaterial({ color: cor, flatShading: true });
@@ -28,6 +36,7 @@ export function criarMeshPacote(tipo: TipoPacote, corPedido: string): THREE.Grou
     m.position.y = y;
     m.castShadow = true;
     g.add(m);
+    return m;
   };
   if (tipo === 'leve') {
     add(new THREE.BoxGeometry(0.8, 0.7, 0.8), lamb('#f3d9a0'), 0.35);
@@ -41,10 +50,26 @@ export function criarMeshPacote(tipo: TipoPacote, corPedido: string): THREE.Grou
     add(new THREE.BoxGeometry(0.8, 0.8, 0.8), lamb('#ffb3c7'), 0.4);
     add(new THREE.BoxGeometry(0.84, 0.14, 0.84), faixa, 0.4);
     add(new THREE.BoxGeometry(0.3, 0.3, 0.3), lamb('#ffffff'), 0.95);
-  } else {
+  } else if (tipo === 'liquido') {
     add(new THREE.CylinderGeometry(0.4, 0.4, 0.9, 10), lamb('#4aa8ff'), 0.45);
     add(new THREE.CylinderGeometry(0.42, 0.42, 0.14, 10), faixa, 0.55);
     add(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 8), lamb('#e8f4ff'), 0.96);
+  } else if (tipo === 'pizza') {
+    add(new THREE.BoxGeometry(1.05, 0.16, 1.05), lamb('#f0dcb0'), 0.08); // caixa de pizza
+    add(new THREE.BoxGeometry(1.08, 0.18, 0.2), faixa, 0.1);
+    add(new THREE.CylinderGeometry(0.34, 0.34, 0.06, 14), lamb('#ffcf4a'), 0.19); // a pizza espiando
+    add(new THREE.SphereGeometry(0.07, 6, 5), lamb('#d33a4b'), 0.25);
+  } else if (tipo === 'gas') {
+    add(new THREE.CylinderGeometry(0.36, 0.36, 0.85, 12), lamb('#d9423a'), 0.5); // botijão
+    add(new THREE.CylinderGeometry(0.37, 0.37, 0.12, 12), faixa, 0.6);
+    add(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 8), lamb('#c9ced6'), 1.02); // válvula
+    add(new THREE.TorusGeometry(0.26, 0.04, 6, 14), lamb('#c9ced6'), 0.95).rotation.x = Math.PI / 2; // argola de proteção
+  } else {
+    add(new THREE.BoxGeometry(0.95, 0.65, 0.7), lamb('#c9ced6'), 0.33); // caixa de transporte
+    add(new THREE.BoxGeometry(0.99, 0.12, 0.74), faixa, 0.6);
+    add(new THREE.SphereGeometry(0.27, 10, 8), lamb('#d9a066'), 0.85); // cabeça do cachorro
+    for (const x of [-0.2, 0.2]) add(new THREE.SphereGeometry(0.1, 6, 5), lamb('#a8703a'), 1.05).position.x = x;
+    add(new THREE.SphereGeometry(0.06, 6, 5), lamb('#2b2b33'), 0.82).position.z = 0.26;
   }
   return g;
 }

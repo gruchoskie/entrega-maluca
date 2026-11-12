@@ -84,7 +84,10 @@ export function criarCenario(fis: Fisica, mundo: Mundo): Cenario {
   cena.add(calcada);
 
   // ---------- Prédios com janelas, portas e toldos; faixas de pedestre; postes de luz ----------
-  criarPredios(cena, cidade.predios);
+  const matPredios = criarPredios(cena, cidade.predios);
+  mundo.aoNoite.push((n) => (matPredios.emissiveIntensity = n * 1.3)); // janelas acesas à noite
+  const tintas = { cidade: '#ffffff', litoral: '#fff0d8', inverno: '#e8f1ff' };
+  mundo.aoTema.push((t) => matPredios.color.set(tintas[t]));
   criarFaixasPedestre(cena);
   criarPostes(fis, cena);
 

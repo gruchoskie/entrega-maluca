@@ -53,6 +53,21 @@ para ele; senão, **arremessa** (dá para acertar a zona de entrega de longe!).
   - **📋 Gerente:** vê as ofertas de pedido e decide quais aceitar (até 3 em andamento); vê os pontos na rua, mas não tem minimapa.
   Com menos de 4 jogadores os papéis se combinam (2: dirige+navega / desce+aceita; 3: dirige / navega+aceita / desce; 1: tudo).
 
+## Mais recursos
+
+- **Pontos na calçada:** coleta e entrega acontecem em frente à porta de um prédio, na calçada. Encoste o veículo no meio-fio.
+- **Configuração da partida (anfitrião):** duração (3, 6 ou 10 min), dificuldade (fácil, normal, caótico), mapa (cidade, litoral, inverno) e sala pública.
+- **Salas abertas:** salas marcadas como públicas aparecem na lista da tela inicial; é só tocar para entrar.
+- **Chat de voz por proximidade (🎤):** liga o microfone e só ouve quem está perto no mapa (no modo "Mesmo carro", quem está dentro da van se ouve normalmente). Usa WebRTC direto entre os jogadores; precisa de HTTPS e permissão do microfone. Em algumas redes muito restritas pode não conectar (não há servidor TURN).
+- **Emotes e frases (😀):** teclas 7, 8, 9 e 0 enviam emotes; o botão 😀 abre as frases prontas.
+- **Novos pacotes:** 🍕 pizza (esfria com o tempo), 🔥 gás (explode com batidas), 🐶 pet (pode fugir do veículo).
+- **Novos veículos:** 🏍️ moto e 🛻 picape.
+- **Dia e noite:** o ciclo é igual para todos; à noite as janelas acendem e o seu veículo liga os faróis.
+- **Rota sugerida:** clique no minimapa para ligar/desligar a linha amarela pelas ruas. O navegador (modo van) também recebe dicas escritas ("Vire à direita · 85 m").
+- **Nível e conquistas (🏆):** XP, níveis, recordes e conquistas guardados no navegador. Cores extras são liberadas por nível.
+- **Instalar como app:** no celular, use "Adicionar à tela inicial" (a versão publicada tem manifesto e ícones).
+- **Bonequinhos:** o entregador a pé tem braços e pernas articulados, balanço do corpo e pose de pulo.
+
 ## Regras do jogo
 
 - Pedidos aparecem com prazo. Cada entrega paga pelo tipo de pacote + distância; **pacote danificado paga menos** e

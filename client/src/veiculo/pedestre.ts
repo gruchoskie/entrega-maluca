@@ -4,7 +4,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Chapeu } from '../../../shared/protocolo';
 import type { Fisica } from '../fisica/fisica';
 import type { EstadoControles } from '../interface/controles';
-import { criarPedestre } from './modelos';
+import { animarPedestre, criarPedestre } from './modelos';
 
 export const CENTRO_PEDESTRE = 0.65; // altura do centro da cápsula
 const VEL = 6.2; // m/s
@@ -83,10 +83,8 @@ export class Pedestre {
     this.objeto.rotation.y = this.rumo;
     // Balançadinha ao andar
     const rel = Math.min(1, Math.abs(this.velocidade) / VEL);
-    this.passoAnim += dt * (4 + rel * 8);
-    this.modelo.position.y = -CENTRO_PEDESTRE + Math.abs(Math.sin(this.passoAnim)) * 0.09 * rel;
-    this.modelo.rotation.x = rel * 0.08;
-    this.modelo.rotation.z = Math.sin(this.passoAnim) * 0.05 * rel;
+    this.passoAnim += dt * (3 + rel * 9);
+    animarPedestre(this.modelo, this.passoAnim, rel, this.noChao);
   }
 
   snapshot() {

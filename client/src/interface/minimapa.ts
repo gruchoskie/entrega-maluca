@@ -11,6 +11,7 @@ export interface DadosMinimapa {
   carros: { x: number; z: number }[];
   jogo: JogoTick | null; // já filtrado para o que este jogador pode ver
   meuId: string;
+  rota?: { x: number; z: number }[] | null; // rota sugerida pelas ruas
 }
 
 export class Minimapa {
@@ -19,8 +20,14 @@ export class Minimapa {
   private fundo = document.createElement('canvas');
   private tam = 140;
 
+  /** Clique/toque no mapa (liga/desliga a rota sugerida). */
+  aoClicar: () => void = () => {};
+
   constructor() {
     this.canvas.id = 'minimapa';
+    this.canvas.style.pointerEvents = 'auto';
+    this.canvas.title = 'Toque para ligar/desligar a rota sugerida';
+    this.canvas.onclick = () => this.aoClicar();
     this.g = this.canvas.getContext('2d')!;
     document.getElementById('hud')!.appendChild(this.canvas);
     this.definirTamanho(140);
@@ -77,6 +84,19 @@ export class Minimapa {
     const px = this.px;
     const k = this.tam / 140; // fator de escala dos ícones
     g.drawImage(this.fundo, 0, 0);
+
+    // Rota sugerida: linha tracejada amarela pelas ruas
+    if (d.rota && d.rota.length > 1) {
+      g.save();
+      g.setLineDash([6 * k, 4 * k]);
+      g.strokeStyle = '#ffe14d';
+      g.lineWidth = 3 * k;
+      g.lineJoin = 'round';
+      g.beginPath();
+      d.rota.forEach((p, i) => (i === 0 ? g.moveTo(px(p.x), px(p.z)) : g.lineTo(px(p.x), px(p.z))));
+      g.stroke();
+      g.restore();
+    }
 
     for (const c of d.carros) {
       g.fillStyle = 'rgba(30,30,40,.7)';

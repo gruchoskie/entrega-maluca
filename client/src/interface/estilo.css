@@ -389,3 +389,61 @@ input { font-family: inherit; }
 
 #btn-sair { display: none; }
 body.em-sala #btn-sair { display: inline-block; }
+
+/* ---------- Novidades: veículos, salas, config, emotes, voz, conquistas ---------- */
+.veic-cards { grid-template-columns: repeat(5, 1fr); }
+.veic-card { padding: 8px 2px; font-size: 11px; } .veic-card .emoji { font-size: 26px; }
+@media (max-width: 760px) { .veic-cards { grid-template-columns: repeat(3, 1fr); } }
+
+.nivel { margin-left: auto; border: 0; background: #fff1e0; color: #c4561e; font-weight: 900; font-size: 13px; border-radius: 12px; padding: 5px 10px; }
+.xpbar { height: 6px; width: 54px; background: #ffd9b8; border-radius: 4px; overflow: hidden; margin-top: 3px; }
+.xpbar i { display: block; height: 100%; background: linear-gradient(90deg, #ffb020, #ff5a3d); }
+.salas { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.salas:empty { display: none; }
+.sala-aberta { display: flex; align-items: center; gap: 10px; border: 3px solid #d7dcff; background: #f6f7ff; border-radius: 14px; padding: 8px 12px; color: #2b2d5a; font-size: 13px; }
+.sala-aberta b { font-size: 18px; letter-spacing: 3px; color: #ff5a3d; } .sala-aberta span { flex: 1; text-align: left; font-weight: 700; } .sala-aberta em { font-style: normal; font-weight: 900; }
+.cor.trancada { background: #c9cce0 !important; font-size: 13px; opacity: .85; }
+
+.config-linha { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+.config-linha > span { font-size: 18px; width: 22px; text-align: center; }
+.seg { display: flex; gap: 4px; flex: 1; }
+.seg button { flex: 1; border: 2px solid #d7dcff; background: #fff; color: #2b2d5a; border-radius: 10px; padding: 6px 2px; font-size: 11px; font-weight: 700; }
+.seg button.sel { border-color: #ff8a3d; background: #fff4e8; } .seg button:disabled { opacity: .8; }
+.publica { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-top: 6px; opacity: .85; }
+
+#btn-mic.ligado { background: #2e9e4f !important; animation: pulsa-mic 1.2s infinite alternate; }
+@keyframes pulsa-mic { to { box-shadow: 0 0 0 6px rgba(76,217,100,.35); } }
+#painel-emote {
+  position: fixed; z-index: 31; top: calc(60px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right));
+  background: rgba(255,255,255,.96); color: #2b2d5a; border-radius: 16px; padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35); width: 240px;
+}
+#painel-emote .emotes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+#painel-emote .emotes button { font-size: 24px; border: 0; background: #f1f3ff; border-radius: 10px; padding: 4px 0; }
+#painel-emote .frases { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; }
+#painel-emote .frases button { border: 0; background: #eef0ff; border-radius: 10px; padding: 6px 4px; font-size: 12px; font-weight: 700; color: #2b2d5a; }
+
+#dica-nav {
+  position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); background: rgba(30,30,60,.82); border: 3px solid #4a7bff;
+  border-radius: 14px; padding: 8px 16px; font-size: 14px; text-align: center; white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis;
+}
+#dica-nav:empty { display: none; } #dica-nav small { display: block; opacity: .8; font-size: 11px; }
+#falando { position: absolute; bottom: 120px; left: calc(12px + env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 4px; }
+#falando span { background: rgba(46,158,79,.85); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
+#falando:empty { display: none; }
+
+.nivel-grande { text-align: center; font-size: 24px; font-weight: 900; color: #ff5a3d; margin: 4px 0 10px; }
+.nivel-grande .xpbar { width: 70%; margin: 4px auto; height: 9px; } .nivel-grande small { display: block; font-size: 11px; color: #2b2d5a; opacity: .7; font-weight: 600; }
+.lista-conq { display: grid; gap: 6px; }
+.conq { display: flex; align-items: center; gap: 10px; background: #f1f3ff; border-radius: 12px; padding: 7px 10px; opacity: .6; }
+.conq.tem { opacity: 1; background: #fff4d6; } .conq span { font-size: 26px; width: 34px; text-align: center; }
+.conq b { display: block; font-size: 13px; } .conq small { font-size: 11px; opacity: .75; }
+.destaque.xp { background: #fff4d6; }
+#r-revanche { margin-top: 6px; }
+
+/* Barra mais compacta (agora são vários botões) */
+#barra { gap: 5px; }
+#barra button { height: 36px; min-width: 36px; padding: 0 7px; font-size: 16px; }
+#btn-qualidade { font-size: 11px !important; }
+@media (max-width: 1150px) and (min-width: 641px) { #placar { left: 38%; } #evento { left: 38%; } }
+
+#papeis:not(:empty) ~ #minimapa { top: calc(240px + env(safe-area-inset-top)); }

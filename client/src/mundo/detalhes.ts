@@ -36,7 +36,7 @@ function texturaFachada(): THREE.CanvasTexture {
 }
 
 /** Todos os prédios fundidos em UMA malha, com UV repetindo as janelas conforme o tamanho real. */
-export function criarPredios(cena: THREE.Scene, predios: Predio[]) {
+export function criarPredios(cena: THREE.Scene, predios: Predio[]): THREE.MeshLambertMaterial {
   const pos: number[] = [];
   const nor: number[] = [];
   const uv: number[] = [];
@@ -101,7 +101,15 @@ export function criarPredios(cena: THREE.Scene, predios: Predio[]) {
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.setIndex(idx);
-  const malha = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: texturaFachada(), vertexColors: true }));
+  // À noite as janelas acendem (emissiveIntensity sobe com o fator de noite)
+  const material = new THREE.MeshLambertMaterial({
+    map: texturaFachada(),
+    vertexColors: true,
+    emissive: new THREE.Color('#ffd27a'),
+    emissiveMap: texturaLuzes(),
+    emissiveIntensity: 0,
+  });
+  const malha = new THREE.Mesh(g, material);
   malha.castShadow = malha.receiveShadow = true;
   cena.add(malha);
 
@@ -140,6 +148,24 @@ export function criarPredios(cena: THREE.Scene, predios: Predio[]) {
     mesh.castShadow = true;
     cena.add(mesh);
   }
+  return material;
+}
+
+/** Mesma célula da fachada, mas só o vidro brilha (usada como mapa de emissão à noite). */
+function texturaLuzes(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#ffffff';
+  g.fillRect(14, 12, 36, 40);
+  g.fillStyle = '#000';
+  g.fillRect(31, 12, 2, 40);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 /** Faixas de pedestre ao redor de cada cruzamento. */

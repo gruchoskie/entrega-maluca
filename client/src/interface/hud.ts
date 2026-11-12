@@ -49,6 +49,8 @@ export class Hud {
   private carga = document.createElement('div');
   private evento = document.createElement('div');
   private banner = document.createElement('div');
+  private dicaNav = document.createElement('div');
+  private falando = document.createElement('div');
   private resultado: HTMLElement | null = null;
   private ultimoEvento = 0;
   private visivel = false;
@@ -63,7 +65,9 @@ export class Hud {
     this.carga.id = 'carga';
     this.evento.id = 'evento';
     this.banner.id = 'banner';
-    this.raiz.append(this.placar, this.ranking, this.papeis, this.pedidos, this.carga, this.evento, this.banner);
+    this.dicaNav.id = 'dica-nav';
+    this.falando.id = 'falando';
+    this.raiz.append(this.placar, this.ranking, this.papeis, this.pedidos, this.carga, this.evento, this.banner, this.dicaNav, this.falando);
     // Clique nos botões "Aceitar" (o HTML é refeito várias vezes por segundo: usa delegação)
     this.pedidos.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-aceitar]');
@@ -76,6 +80,18 @@ export class Hud {
     this.visivel = v;
     for (const e of [this.placar, this.ranking, this.papeis, this.pedidos, this.carga, this.evento]) e.style.display = v ? '' : 'none';
     if (!v) this.banner.textContent = '';
+  }
+
+  /** Dica do navegador/entregador: direção e distância até o próximo destino. */
+  definirDica(html: string) {
+    if (this.dicaNav.innerHTML !== html) this.dicaNav.innerHTML = html;
+    this.dicaNav.style.display = html && this.visivel ? '' : 'none';
+  }
+
+  /** Quem está falando no chat de voz agora. */
+  definirFalando(nomes: string[]) {
+    const html = nomes.map((n) => `<span>🎙️ ${esc(n)}</span>`).join('');
+    if (this.falando.innerHTML !== html) this.falando.innerHTML = html;
   }
 
   /** Mostra o(s) papel(éis) do jogador no modo van. */
@@ -204,7 +220,7 @@ export class Hud {
   // ---------------------------------------------------------------------------
   // Resultados: pódio, destaques e tabela
   // ---------------------------------------------------------------------------
-  mostrarResultado(r: Resultado, ehAnfitriao: boolean, aoVoltar: () => void) {
+  mostrarResultado(r: Resultado, ehAnfitriao: boolean, aoVoltar: () => void, aoRevanche: () => void, extra = '') {
     this.esconderResultado();
     const lista = [...r.jogadores].sort((a, b) => b.dinheiro - a.dinheiro);
     const medalha = ['🥇', '🥈', '🥉'];
@@ -242,10 +258,16 @@ export class Hud {
           <td>${j.entregas}</td><td>${fmtDin(j.dinheiro)}</td><td>${j.capotadas}</td></tr>`,
         )
         .join('')}</table>
-      ${ehAnfitriao ? '<button class="primario" id="r-voltar">Voltar ao lobby</button>' : '<div class="sub">Aguardando o anfitrião voltar ao lobby…</div>'}
+      ${extra}
+      ${
+        ehAnfitriao
+          ? '<button class="primario" id="r-revanche">🔁 Jogar de novo</button><button class="link" id="r-voltar">Voltar ao lobby</button>'
+          : '<div class="sub">Aguardando o anfitrião escolher o que fazer…</div>'
+      }
     </div>`;
     document.getElementById('ui')!.appendChild(d);
     d.querySelector('#r-voltar')?.addEventListener('click', aoVoltar);
+    d.querySelector('#r-revanche')?.addEventListener('click', aoRevanche);
     this.resultado = d;
   }
 

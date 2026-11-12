@@ -6,7 +6,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { JogadorInfo } from '../../../shared/protocolo';
 import { Motor } from '../audio/audio';
 import type { Fisica } from '../fisica/fisica';
-import { CONFIGS, criarModelo, criarPedestre, type ModeloVeiculo } from './modelos';
+import { CONFIGS, animarPedestre, criarModelo, criarPedestre, type ModeloVeiculo } from './modelos';
 import { CENTRO_PEDESTRE } from './pedestre';
 
 const ATRASO_MS = 130; // mostra o passado: dá tempo de chegarem 2 pacotes (jitter)
@@ -35,6 +35,7 @@ export class VeiculoRemoto {
   private pos = new THREE.Vector3();
   private rot = new THREE.Quaternion();
   private temPose = false;
+  private fasePe = 0;
   private placa: THREE.Sprite;
 
   constructor(private fis: Fisica, public info: JogadorInfo, forma: Forma = 'veiculo') {
@@ -147,6 +148,11 @@ export class VeiculoRemoto {
     if (this.modelo) {
       const giro = (this.velocidade * dt) / this.modelo.raioRoda;
       for (const r of this.modelo.rodas) r.rotation.x += giro;
+    }
+    if (this.pedestre) {
+      const rel = Math.min(1, this.velocidade / 6.2);
+      this.fasePe += dt * (3 + rel * 9);
+      animarPedestre(this.pedestre, this.fasePe, rel, this.pos.y < 1.2);
     }
   }
 

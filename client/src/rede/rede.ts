@@ -22,7 +22,20 @@ export class Rede {
     this.ouvintes.set(tipo, l);
   }
 
+  private conectando: Promise<void> | null = null;
+
+  /** Conecta (ou reaproveita a conexão/tentativa em andamento). */
   conectar(): Promise<void> {
+    if (this.conectado) return Promise.resolve();
+    if (this.conectando) return this.conectando;
+    const p = this.abrir();
+    this.conectando = p;
+    const limpar = () => (this.conectando = null);
+    p.then(limpar, limpar);
+    return p;
+  }
+
+  private abrir(): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(urlServidor());
       this.ws = ws;
@@ -40,8 +53,9 @@ export class Rede {
         reject(new Error('falha de conexão'));
       };
       ws.onclose = () => {
+        const estava = this.conectado;
         this.conectado = false;
-        this.emitir({ t: 'erro', msg: 'Conexão perdida com o servidor.' });
+        if (estava) this.emitir({ t: 'erro', msg: 'Conexão perdida com o servidor.' }); // falha ao conectar já é tratada por quem chamou
       };
       ws.onmessage = (e) => {
         try {

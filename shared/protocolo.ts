@@ -1,8 +1,8 @@
 // Tipos e mensagens compartilhados entre cliente e servidor.
 // Sem dependências de DOM/Node: pode ser importado pelos dois lados.
 
-export type TipoVeiculo = 'scooter' | 'van' | 'carrinho';
-export type TipoPacote = 'leve' | 'pesado' | 'fragil' | 'liquido';
+export type TipoVeiculo = 'scooter' | 'moto' | 'van' | 'picape' | 'carrinho';
+export type TipoPacote = 'leve' | 'pesado' | 'fragil' | 'liquido' | 'pizza' | 'gas' | 'pet';
 export type Fase = 'lobby' | 'jogo' | 'resultado';
 export type Chapeu = 'nenhum' | 'cartola' | 'cowboy' | 'coroa' | 'festa';
 export type Buzina = 'padrao' | 'patinho' | 'caminhao' | 'melodia';
@@ -12,7 +12,24 @@ export type Modo = 'equipe' | 'individual' | 'van';
 export type Papel = 'motorista' | 'navegador' | 'entregador' | 'gerente';
 export const MODOS: Modo[] = ['equipe', 'individual', 'van'];
 
-export const VEICULOS: TipoVeiculo[] = ['scooter', 'van', 'carrinho'];
+export type Dificuldade = 'facil' | 'normal' | 'caotico';
+export const DIFICULDADES: Dificuldade[] = ['facil', 'normal', 'caotico'];
+export type Mapa = 'cidade' | 'litoral' | 'inverno';
+export const MAPAS: Mapa[] = ['cidade', 'litoral', 'inverno'];
+export const DURACOES = [180, 360, 600]; // segundos (3, 6 e 10 min)
+
+/** Chat rápido: emotes e frases prontas (o servidor só repassa o que está nestas listas). */
+export const EMOTES = ['👍', '😂', '🚨', '😡', '🙏', '🎉'];
+export const FRASES = ['Vem para cá!', 'Ajuda!', 'Cuidado!', 'Valeu!', 'Estou indo!', 'Pode aceitar!'];
+
+export interface SalaPublica {
+  codigo: string;
+  modo: Modo;
+  mapa: Mapa;
+  jogadores: number;
+}
+
+export const VEICULOS: TipoVeiculo[] = ['scooter', 'moto', 'van', 'picape', 'carrinho'];
 export const CHAPEUS: Chapeu[] = ['nenhum', 'cartola', 'cowboy', 'coroa', 'festa'];
 export const BUZINAS: Buzina[] = ['padrao', 'patinho', 'caminhao', 'melodia'];
 export const CORES = ['#ff5a5f', '#ffb020', '#ffe14d', '#4cd964', '#2ec4d6', '#4a7bff', '#b061ff', '#ff7ac8'];
@@ -45,6 +62,10 @@ export interface SalaInfo {
   anfitriao: string;
   fase: Fase;
   modo: Modo;
+  duracao: number; // segundos
+  dificuldade: Dificuldade;
+  mapa: Mapa;
+  publica: boolean; // aparece na lista de salas abertas
   jogadores: JogadorInfo[];
   dinheiro: number; // carteira da equipe
   upgrades: Upgrades;
@@ -136,6 +157,10 @@ export type MsgCliente =
   | { t: 'balanco'; v: number }
   | { t: 'comprar'; item: string }
   | { t: 'modo'; modo: Modo } // anfitrião escolhe o modo de jogo (no lobby)
+  | { t: 'config'; duracao?: number; dificuldade?: Dificuldade; mapa?: Mapa; publica?: boolean } // anfitrião, no lobby
+  | { t: 'emote'; k: string } // emote ou frase pronta
+  | { t: 'voz'; para: string; dados: unknown } // sinalização WebRTC do chat de voz por proximidade
+  | { t: 'listar' } // pede a lista de salas públicas abertas
   | { t: 'aceitar'; id: number } // modo van: o gerente aceita uma oferta
   | { t: 'van'; acao: 'sair' | 'entrar' } // modo van: o entregador desce/sobe da van
   | { t: 'voltar' };
@@ -146,6 +171,9 @@ export type MsgServidor =
   | { t: 'sala'; sala: SalaInfo }
   | { t: 'erro'; msg: string }
   | { t: 'buzina'; id: string }
+  | { t: 'emote'; id: string; k: string }
+  | { t: 'voz'; de: string; dados: unknown }
+  | { t: 'salas'; lista: SalaPublica[] }
   | {
       t: 'tick';
       agora: number; // Date.now() do servidor
@@ -153,7 +181,15 @@ export type MsgServidor =
       ids: string[]; // ids na mesma ordem de `j`
       jogo?: JogoTick;
     }
-  | { t: 'fx'; k: 'entrega' | 'quebrou' | 'derramou' | 'caiu' | 'pegou' | 'perdido'; x: number; y: number; z: number; v?: number; id?: string }
+  | {
+      t: 'fx';
+      k: 'entrega' | 'quebrou' | 'derramou' | 'caiu' | 'pegou' | 'perdido' | 'explodiu' | 'esfriou' | 'fugiu';
+      x: number; y: number; z: number;
+      v?: number; // pagamento (entrega)
+      w?: number; // integridade do pacote na entrega (0..100)
+      tp?: string; // tipo do pacote entregue
+      id?: string;
+    }
   | { t: 'resultado'; r: Resultado };
 
 export interface JogoTick {

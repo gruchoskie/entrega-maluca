@@ -18,8 +18,14 @@ const CONTAGEM = 4; // s de contagem regressiva
 const GRAV = 22;
 const MAX_ATIVOS_VAN = 3; // pedidos aceitos ao mesmo tempo no modo van
 const OFERTA_MS = 28000; // quanto tempo uma oferta fica esperando o gerente
-const BASE: Record<TipoPacote, number> = { leve: 40, pesado: 90, fragil: 75, liquido: 65 };
-const SORTEIO: TipoPacote[] = ['leve', 'leve', 'leve', 'leve', 'pesado', 'pesado', 'fragil', 'fragil', 'liquido', 'liquido'];
+const BASE: Record<TipoPacote, number> = { leve: 40, pesado: 90, fragil: 75, liquido: 65, pizza: 70, gas: 110, pet: 95 };
+/** Ajustes da dificuldade escolhida no lobby. */
+const DIF = {
+  facil: { prazo: 1.4, evento: 1.6, dano: 0.6, freq: 1.3 },
+  normal: { prazo: 1, evento: 1, dano: 1, freq: 1 },
+  caotico: { prazo: 0.75, evento: 0.55, dano: 1.4, freq: 0.75 },
+};
+const SORTEIO: TipoPacote[] = ['leve', 'leve', 'leve', 'pesado', 'pesado', 'fragil', 'fragil', 'liquido', 'liquido', 'pizza', 'pizza', 'gas', 'pet'];
 const CORES_PEDIDO = ['#ff5a5f', '#4a7bff', '#4cd964', '#ffb020', '#b061ff', '#2ec4d6'];
 const EVENTOS: TipoCaos[] = ['chuva', 'transito', 'obras', 'buraco', 'vento'];
 
@@ -33,6 +39,7 @@ interface Pacote {
   pos: [number, number, number];
   vel: [number, number, number];
   integ: number;
+  proxFuga?: number; // pet: quando tenta fugir de novo
 }
 
 interface Stats {
@@ -63,7 +70,11 @@ export class Jogo {
   /** Pose da van (modo van): vem do cliente do motorista enquanto ele não está a pé. */
   private van = { p: [0, 1, -10], q: [0, 0, 0, 1], v: [0, 0, 0] };
 
+  private dif: (typeof DIF)['normal'];
+
   constructor(private sala: Sala, readonly modo: Modo) {
+    this.dif = DIF[sala.dificuldade] ?? DIF.normal;
+    this.fim = this.inicio + sala.duracao * 1000; // duração escolhida no lobby
     for (const j of sala.jogadores.values()) this.stat(j);
   }
 
@@ -109,6 +120,30 @@ export class Jogo {
     this.gerarPedidos(agora);
 
     for (const pk of [...this.pacotes.values()]) {
+      // Pizza esfria com o tempo (depois de pega); pet foge de vez em quando enquanto é carregado
+      if (pk.tipo === 'pizza' && pk.estado !== 'coleta') {
+        pk.integ -= dt * 1.1 * this.dif.dano;
+        if (pk.integ <= 0) {
+          this.verificarDestruido(pk);
+          continue;
+        }
+      }
+      if (pk.tipo === 'pet' && pk.estado === 'carregado') {
+        pk.proxFuga ??= agora + rnd(7000, 13000);
+        if (agora >= pk.proxFuga) {
+          pk.proxFuga = agora + rnd(7000, 13000);
+          if (Math.random() < 0.5 * this.dif.dano) {
+            const d = pk.dono ? this.sala.jogadores.get(pk.dono) : undefined;
+            if (d) {
+              const p = this.posDe(d);
+              pk.pos = [p[0], p[1] + 1.8, p[2]];
+            }
+            this.soltar(pk, [rnd(-5, 5), 6, rnd(-5, 5)]);
+            this.fx({ t: 'fx', k: 'fugiu', x: pk.pos[0], y: pk.pos[1], z: pk.pos[2] });
+            continue;
+          }
+        }
+      }
       if (pk.estado === 'carregado') {
         const d = pk.dono ? this.sala.jogadores.get(pk.dono) : undefined;
         if (!d) {
@@ -132,7 +167,7 @@ export class Jogo {
     if (!this.evento && agora >= this.proxEvento) this.iniciarEvento(agora);
     else if (this.evento && agora >= this.evento.fim) {
       this.evento = null;
-      this.proxEvento = agora + rnd(18000, 32000);
+      this.proxEvento = agora + rnd(18000, 32000) * this.dif.evento;
     }
   }
 
@@ -142,7 +177,7 @@ export class Jogo {
         const meus = this.pedidos.filter((p) => p.dono === j.id).length;
         if (meus < 2 && agora >= (this.proxPedido.get(j.id) ?? 0)) {
           this.novoPedido(agora, j.id, 'ativo');
-          this.proxPedido.set(j.id, agora + rnd(9000, 14000));
+          this.proxPedido.set(j.id, agora + rnd(9000, 14000) * this.dif.freq);
         }
       }
     } else if (this.modo === 'van') {
@@ -150,11 +185,11 @@ export class Jogo {
       const ofertas = this.pedidos.filter((p) => p.estado === 'oferta').length;
       if (ofertas < 3 && agora >= (this.proxPedido.get('*') ?? 0)) {
         this.novoPedido(agora, null, 'oferta');
-        this.proxPedido.set('*', agora + rnd(7000, 11000));
+        this.proxPedido.set('*', agora + rnd(7000, 11000) * this.dif.freq);
       }
     } else if (this.pedidos.length < 2 + this.sala.jogadores.size && agora >= (this.proxPedido.get('*') ?? 0)) {
       this.novoPedido(agora, null, 'ativo');
-      this.proxPedido.set('*', agora + rnd(9000, 15000));
+      this.proxPedido.set('*', agora + rnd(9000, 15000) * this.dif.freq);
     }
   }
 
@@ -205,7 +240,7 @@ export class Jogo {
     const tipo = SORTEIO[Math.floor(Math.random() * SORTEIO.length)];
     const id = this.proxId++;
     // No modo van a equipe anda a pé e troca de papéis: prazo mais folgado
-    const prazoTotal = (28 + d / 5) * (this.modo === 'van' ? 1.5 : 1) * 1000;
+    const prazoTotal = (28 + d / 5) * (this.modo === 'van' ? 1.5 : 1) * this.dif.prazo * 1000;
     const pedido: PedidoInfo = {
       id, tipo, coleta, entrega,
       prazoFim: agora + prazoTotal,
@@ -259,7 +294,7 @@ export class Jogo {
     this.pedidos = this.pedidos.filter((p) => p.id !== pk.id);
   }
 
-  private perder(id: number, k: 'perdido' | 'quebrou' | 'derramou') {
+  private perder(id: number, k: 'perdido' | 'quebrou' | 'derramou' | 'explodiu' | 'esfriou') {
     const pk = this.pacotes.get(id);
     this.pedidos = this.pedidos.filter((p) => p.id !== id);
     if (!pk) return;
@@ -283,7 +318,7 @@ export class Jogo {
       s.dinheiro += pagamento;
     }
     const alvo = PONTOS_ENTREGA[pk.pedido.entrega];
-    this.fx({ t: 'fx', k: 'entrega', x: alvo.x, y: 1, z: alvo.z, v: pagamento, id: pk.ultimo ?? undefined });
+    this.fx({ t: 'fx', k: 'entrega', x: alvo.x, y: 1, z: alvo.z, v: pagamento, w: Math.round(pk.integ), tp: pk.tipo, id: pk.ultimo ?? undefined });
     this.remover(pk);
   }
 
@@ -336,8 +371,10 @@ export class Jogo {
   }
 
   private danoQueda(pk: Pacote, vy: number) {
-    if (pk.tipo === 'fragil' && vy > 8) pk.integ -= (vy - 6) * 6;
-    else if (pk.tipo === 'liquido' && vy > 6) pk.integ -= (vy - 4) * 4;
+    const f = this.dif.dano;
+    if (pk.tipo === 'fragil' && vy > 8) pk.integ -= (vy - 6) * 6 * f;
+    else if (pk.tipo === 'liquido' && vy > 6) pk.integ -= (vy - 4) * 4 * f;
+    else if (pk.tipo === 'gas' && vy > 5) pk.integ -= (vy - 3) * 10 * f;
     this.verificarDestruido(pk);
   }
 
@@ -345,7 +382,8 @@ export class Jogo {
     if (pk.integ > 0) return;
     const ult = pk.ultimo ? this.sala.jogadores.get(pk.ultimo) : undefined;
     if (ult) this.stat(ult).quebrados++;
-    this.perder(pk.id, pk.tipo === 'liquido' ? 'derramou' : 'quebrou');
+    const k = pk.tipo === 'liquido' ? 'derramou' : pk.tipo === 'gas' ? 'explodiu' : pk.tipo === 'pizza' ? 'esfriou' : 'quebrou';
+    this.perder(pk.id, k);
   }
 
   // ---------------------------------------------------------------------------
@@ -443,10 +481,13 @@ export class Jogo {
         this.soltar(pk, [rnd(-3, 3), 5, rnd(-3, 3)]);
         this.fx({ t: 'fx', k: 'caiu', x: pk.pos[0], y: pk.pos[1], z: pk.pos[2], id: j.id });
       } else if (pk.tipo === 'fragil' && g > 3) {
-        pk.integ -= (g - 3) * 7;
+        pk.integ -= (g - 3) * 7 * this.dif.dano;
         this.verificarDestruido(pk);
       } else if (pk.tipo === 'liquido' && g > 3) {
-        pk.integ -= g * 1.5;
+        pk.integ -= g * 1.5 * this.dif.dano;
+        this.verificarDestruido(pk);
+      } else if (pk.tipo === 'gas' && g > 2.5) {
+        pk.integ -= (g - 2) * 14 * this.dif.dano; // gás é MUITO sensível
         this.verificarDestruido(pk);
       }
     }
