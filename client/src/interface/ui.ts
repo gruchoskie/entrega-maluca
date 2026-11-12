@@ -124,8 +124,23 @@ export class Ui {
 
   /** Volta à tela inicial: recarrega sem o código da sala (a conexão fecha e o servidor tira você da sala). */
   sairDaSala() {
-    if (!confirm('Sair da sala e voltar à tela inicial?')) return;
-    window.location.href = location.pathname;
+    // Confirmação própria (a janelinha nativa é bloqueada em alguns navegadores, como os de WhatsApp/Instagram)
+    if (document.getElementById('tela-sair')) return;
+    const t = document.createElement('div');
+    t.className = 'tela menu';
+    t.id = 'tela-sair';
+    t.style.zIndex = '12';
+    t.innerHTML = `<div class="cartao" style="max-width:340px;text-align:center">
+      <h1 style="font-size:24px">Sair da sala?</h1>
+      <p class="sub">Você volta para a tela inicial. Se estiver numa partida, ela continua para os outros.</p>
+      <div class="acoes"><button class="primario" id="sair-sim">Sair</button>
+      <button class="link" id="sair-nao">Continuar jogando</button></div></div>`;
+    this.raiz.appendChild(t);
+    t.querySelector('#sair-nao')!.addEventListener('click', () => t.remove());
+    t.querySelector('#sair-sim')!.addEventListener('click', () => {
+      // Recarrega sem o código da sala: a conexão fecha e o servidor tira você da sala
+      window.location.assign(location.pathname);
+    });
   }
 
   definirRotuloQualidade(txt: string) {
@@ -384,7 +399,20 @@ export class Ui {
         await navigator.clipboard.writeText(link);
         el('l-copiar').textContent = '✅ Link copiado!';
       } catch {
-        prompt('Copie o link de convite:', link);
+        // Alternativa para navegadores que bloqueiam a área de transferência
+        const ta = document.createElement('textarea');
+        ta.value = link;
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try {
+          ok = document.execCommand('copy');
+        } catch {
+          /* ignora */
+        }
+        ta.remove();
+        if (ok) el('l-copiar').textContent = '✅ Link copiado!';
+        else this.aviso('Copie o link da barra de endereços do navegador');
       }
     };
   }
