@@ -108,6 +108,7 @@ export class Ui {
       barra.appendChild(b);
       return b;
     };
+    botao('btn-sair', '🏠', 'Sair da sala e voltar à tela inicial', () => this.sairDaSala());
     botao('btn-ajuda', '❓', 'Como jogar', () => this.mostrarTutorial());
     botao('btn-qualidade', 'Gráficos', 'Qualidade gráfica', () => this.aoQualidade());
     const som = botao('btn-mudo', '', 'Som', () => {
@@ -120,6 +121,12 @@ export class Ui {
 
   aoQualidade: () => void = () => {};
   celular = false;
+
+  /** Volta à tela inicial: recarrega sem o código da sala (a conexão fecha e o servidor tira você da sala). */
+  sairDaSala() {
+    if (!confirm('Sair da sala e voltar à tela inicial?')) return;
+    window.location.href = location.pathname;
+  }
 
   definirRotuloQualidade(txt: string) {
     const b = document.getElementById('btn-qualidade');
@@ -361,8 +368,10 @@ export class Ui {
         <button id="l-loja" class="loja-btn">🛒 Loja · ${fmt(sala.dinheiro)}</button>
         ${ehAnf ? '<button class="primario iniciar" id="l-iniciar">▶ Iniciar partida</button>' : '<div class="dica-lobby">Aguardando o anfitrião iniciar…</div>'}
       </div>
-      <div class="dica-lobby">Dirija à vontade enquanto os amigos chegam. Compartilhe o link!</div>`;
+      <div class="dica-lobby">Dirija à vontade enquanto os amigos chegam. Compartilhe o link!</div>
+      <button class="link" id="l-sair">← Sair da sala</button>`;
     this.desenharSeletores('l-cores', 'l-veic');
+    el('l-sair').onclick = () => this.sairDaSala();
     document.getElementById('l-iniciar')?.addEventListener('click', () => this.aoIniciar());
     p.querySelectorAll<HTMLButtonElement>('[data-modo]').forEach((b) => (b.onclick = () => this.aoModo(b.dataset.modo as Modo)));
     el('l-loja').onclick = () => {

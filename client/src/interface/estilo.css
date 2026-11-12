@@ -386,3 +386,6 @@ input { font-family: inherit; }
 }
 
 .bolinha { display: inline-block; vertical-align: middle; }
+
+#btn-sair { display: none; }
+body.em-sala #btn-sair { display: inline-block; }

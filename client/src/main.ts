@@ -180,6 +180,7 @@ async function iniciar() {
     iniciarMusica();
     ui.tutorialSeNovo();
     ui.esconderMenu();
+    document.body.classList.add('em-sala'); // mostra o botão 🏠 de sair
     elHud.hidden = false;
     history.replaceState(null, '', `${location.pathname}?sala=${m.sala.codigo}`);
     sincronizarSala(m.sala);

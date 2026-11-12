@@ -366,8 +366,11 @@ export class Jogo {
 
   /** Tecla E: pega um pacote próximo; se já está carregando, passa para um amigo ou arremessa. */
   acao(j: Jogador) {
-    if (this.acabou || Date.now() < this.inicio) return;
-    if (this.modo === 'van' && (!j.papeis.includes('entregador') || !j.aPe)) return;
+    const aviso = (msg: string) => this.sala.enviar(j, { t: 'erro', msg });
+    if (this.acabou) return;
+    if (Date.now() < this.inicio) return aviso('Espere a largada!');
+    if (this.modo === 'van' && !j.papeis.includes('entregador')) return aviso('Só o entregador pega pacotes (tecla F para descer da van).');
+    if (this.modo === 'van' && !j.aPe) return aviso('Desça da van (tecla F) para pegar o pacote.');
     const cap = 1 + this.sala.upgrades.capacidade;
     const minhas = this.cargaDe(j.id);
     const p0 = this.posDe(j);
@@ -393,7 +396,13 @@ export class Jogo {
         return;
       }
     }
-    if (minhas.length === 0) return;
+    if (minhas.length === 0) {
+      // Nada coletado: explica o motivo em vez de ficar mudo
+      const perto = [...this.pacotes.values()].filter((pk) => pk.estado !== 'carregado' && dist2d(p0[0], p0[2], pk.pos[0], pk.pos[2]) < 25);
+      if (perto.length === 0) return aviso('Nenhum pacote por perto: vá até um pilar de luz com 📦.');
+      if (this.modo === 'individual' && perto.every((pk) => pk.pedido.dono !== j.id)) return aviso('Esse pacote é de outro jogador. Procure o pilar do seu pedido.');
+      return aviso('Chegue mais perto: entre no círculo colorido do pilar 📦.');
+    }
 
     // Passar para um amigo próximo (só no modo equipe)
     if (this.modo === 'equipe') {
