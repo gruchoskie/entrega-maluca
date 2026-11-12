@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#7fd0ff" />
+    <title>Entrega Maluca</title>
+    <link rel="stylesheet" href="/src/interface/estilo.css" />
+  </head>
+  <body>
+    <canvas id="jogo"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" hidden>
+      <div id="velocimetro"><span id="vel">0</span> km/h</div>
+      <div id="veiculo-atual"></div>
+      <div id="dica"></div>
+    </div>
+
+    <!-- Controles de toque (só aparecem no celular) -->
+    <div id="toque" hidden>
+      <div id="joy-zona">
+        <div id="joy-base"><div id="joy-pino"></div></div>
+      </div>
+      <div id="botoes">
+        <button id="btn-buzina" class="btn pequeno">📣<small>Buzina</small></button>
+        <button id="btn-pegar" class="btn pequeno">📦<small>Pegar</small></button>
+        <button id="btn-pular" class="btn grande">⤴<small>Pular</small></button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
