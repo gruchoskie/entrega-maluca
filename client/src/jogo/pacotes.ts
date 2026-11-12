@@ -2,7 +2,6 @@
 import * as THREE from 'three';
 import { PONTOS_COLETA, PONTOS_ENTREGA, RAIO_PONTO } from '../../../shared/cidade';
 import type { PacoteInfo, PedidoInfo, TipoPacote } from '../../../shared/protocolo';
-import { OFFSET_CARGA, type TipoVeiculo } from '../veiculo/modelos';
 
 export const NOME_PACOTE: Record<TipoPacote, string> = {
   leve: 'Leve',
@@ -56,9 +55,8 @@ interface Item {
 }
 
 export interface ContextoPacotes {
-  meuId: string;
-  veiculo: { carga: THREE.Group; tipo: TipoVeiculo } | null;
-  remotos: Map<string, { carga: THREE.Group; info: { veic: TipoVeiculo } }>;
+  /** Onde o pacote de `dono` deve ficar encaixado (veículo, van ou costas do entregador); null = solto no mundo. */
+  alvoCarga(dono: string): { carga: THREE.Group; offset: [number, number, number] } | null;
 }
 
 export class PacotesVisuais {
@@ -98,13 +96,12 @@ export class PacotesVisuais {
       }
       const g = it.grupo;
       if (p.estado === 'carregado' && p.dono) {
-        const alvo = p.dono === ctx.meuId ? ctx.veiculo : ctx.remotos.get(p.dono);
-        const tipo = p.dono === ctx.meuId ? ctx.veiculo?.tipo : (alvo as { info: { veic: TipoVeiculo } } | undefined)?.info.veic;
-        if (alvo && tipo) {
+        const alvo = ctx.alvoCarga(p.dono);
+        if (alvo) {
           if (g.parent !== alvo.carga) alvo.carga.add(g);
           const idx = empilhados.get(p.dono) ?? 0;
           empilhados.set(p.dono, idx + 1);
-          const o = OFFSET_CARGA[tipo];
+          const o = alvo.offset;
           g.position.set(o[0], o[1] + idx * 0.85 - 0.35, o[2]);
           g.rotation.set(0, 0, 0);
           continue;

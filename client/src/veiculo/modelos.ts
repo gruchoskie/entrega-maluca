@@ -315,6 +315,18 @@ export function criarModelo(tipo: TipoVeiculo, cor: string, chapeu: Chapeu = 'ne
   return { raiz, rodas, raioRoda };
 }
 
+/** Entregador a pé (modo van): o mesmo personagem, sem veículo. Origem nos pés. */
+export function criarPedestre(cor: string, chapeu: Chapeu): THREE.Group {
+  const g = new THREE.Group();
+  const e = entregador(new THREE.Color(cor), chapeu, { mao: [0.3, 0.1, 0.12], pernas: 'em-pe' });
+  e.position.y = 0.62;
+  e.traverse((o) => {
+    if (o instanceof THREE.Mesh) o.castShadow = true;
+  });
+  g.add(e);
+  return g;
+}
+
 /** Onde o primeiro pacote se encaixa (coordenadas do modelo; origem no chão). */
 export const OFFSET_CARGA: Record<TipoVeiculo, [number, number, number]> = {
   scooter: [0, 1.8, -0.95],

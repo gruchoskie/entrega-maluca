@@ -37,6 +37,31 @@ export const PONTOS_ENTREGA: Ponto[] = [
 
 export const RAIO_PONTO = 5.5; // raio da zona de coleta/entrega
 
+// ---------- Coordenadas para o navegador "cantar" no modo van ----------
+// Ruas verticais (x constante) = letras A..G; ruas horizontais (z constante) = números 1..7.
+const LETRAS = 'ABCDEFG';
+export const nomeRuaX = (i: number) => LETRAS[i];
+export const nomeRuaZ = (i: number) => String(i + 1);
+
+/** Descreve um ponto (que fica no meio de um trecho de rua), ex.: "Rua E, entre 2 e 3". */
+export function coordenada(x: number, z: number): string {
+  const ix = ESTRADAS.findIndex((e) => Math.abs(e - x) < 1);
+  const iz = ESTRADAS.findIndex((e) => Math.abs(e - z) < 1);
+  const entre = (v: number) => {
+    const i = ESTRADAS.findIndex((e, k) => v > e && v < (ESTRADAS[k + 1] ?? Infinity));
+    return [Math.max(0, i), Math.min(ESTRADAS.length - 1, i + 1)];
+  };
+  if (ix >= 0 && iz < 0) {
+    const [a, b] = entre(z);
+    return `Rua ${nomeRuaX(ix)}, entre ${nomeRuaZ(a)} e ${nomeRuaZ(b)}`;
+  }
+  if (iz >= 0 && ix < 0) {
+    const [a, b] = entre(x);
+    return `Rua ${nomeRuaZ(iz)}, entre ${nomeRuaX(a)} e ${nomeRuaX(b)}`;
+  }
+  return `Cruzamento ${nomeRuaX(Math.max(0, ix))}-${nomeRuaZ(Math.max(0, iz))}`;
+}
+
 export interface Predio {
   x: number;
   z: number;

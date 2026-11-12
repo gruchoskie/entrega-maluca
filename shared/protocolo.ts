@@ -7,6 +7,11 @@ export type Fase = 'lobby' | 'jogo' | 'resultado';
 export type Chapeu = 'nenhum' | 'cartola' | 'cowboy' | 'coroa' | 'festa';
 export type Buzina = 'padrao' | 'patinho' | 'caminhao' | 'melodia';
 
+/** equipe: todos veem os mesmos pedidos · individual: cada um com os seus (ranking) · van: todos no mesmo carro, com papéis. */
+export type Modo = 'equipe' | 'individual' | 'van';
+export type Papel = 'motorista' | 'navegador' | 'entregador' | 'gerente';
+export const MODOS: Modo[] = ['equipe', 'individual', 'van'];
+
 export const VEICULOS: TipoVeiculo[] = ['scooter', 'van', 'carrinho'];
 export const CHAPEUS: Chapeu[] = ['nenhum', 'cartola', 'cowboy', 'coroa', 'festa'];
 export const BUZINAS: Buzina[] = ['padrao', 'patinho', 'caminhao', 'melodia'];
@@ -20,6 +25,7 @@ export interface JogadorInfo {
   chapeu: Chapeu;
   buzina: Buzina;
   slot: number; // 0..3: posição de largada
+  papeis: Papel[]; // só no modo "van" durante a partida
 }
 
 export interface Upgrades {
@@ -38,6 +44,7 @@ export interface SalaInfo {
   codigo: string;
   anfitriao: string;
   fase: Fase;
+  modo: Modo;
   jogadores: JogadorInfo[];
   dinheiro: number; // carteira da equipe
   upgrades: Upgrades;
@@ -55,6 +62,17 @@ export interface PedidoInfo {
   base: number; // pagamento base
   letra: string; // A, B, C...
   cor: string;
+  dono: string | null; // modo individual: de quem é o pedido
+  estado: 'oferta' | 'ativo'; // modo van: "oferta" espera o gerente aceitar
+  ofertaFim: number; // Date.now() em que a oferta some
+}
+
+export interface RankItem {
+  id: string;
+  nome: string;
+  cor: string;
+  dinheiro: number;
+  entregas: number;
 }
 
 export interface PacoteInfo {
@@ -88,6 +106,7 @@ export interface ResultadoJogador {
 }
 
 export interface Resultado {
+  modo: Modo;
   dinheiroTotal: number;
   entregas: number;
   perdidos: number;
@@ -116,6 +135,9 @@ export type MsgCliente =
   | { t: 'impacto'; g: number }
   | { t: 'balanco'; v: number }
   | { t: 'comprar'; item: string }
+  | { t: 'modo'; modo: Modo } // anfitrião escolhe o modo de jogo (no lobby)
+  | { t: 'aceitar'; id: number } // modo van: o gerente aceita uma oferta
+  | { t: 'van'; acao: 'sair' | 'entrar' } // modo van: o entregador desce/sobe da van
   | { t: 'voltar' };
 
 // ---------- Mensagens servidor → cliente ----------
@@ -127,7 +149,7 @@ export type MsgServidor =
   | {
       t: 'tick';
       agora: number; // Date.now() do servidor
-      j: number[][]; // por jogador: [idx, px,py,pz, qx,qy,qz,qw, vx,vy,vz, capotadas]
+      j: number[][]; // por jogador: [px,py,pz, qx,qy,qz,qw, vx,vy,vz, capotadas, aPe(0/1)]
       ids: string[]; // ids na mesma ordem de `j`
       jogo?: JogoTick;
     }
@@ -141,4 +163,6 @@ export interface JogoTick {
   pacotes: PacoteInfo[];
   evento: EventoCaos | null;
   dinheiroPartida: number;
+  modo: Modo;
+  ranking: RankItem[]; // todos os jogadores, do que mais ganhou para o que menos ganhou
 }

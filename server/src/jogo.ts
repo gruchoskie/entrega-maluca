@@ -1,16 +1,23 @@
 // Lógica autoritativa da partida: tempo, pedidos, pacotes, dinheiro e eventos de caos.
-// O cliente só prevê o movimento do próprio veículo; todo o resto é decidido aqui.
+// O cliente só prevê o movimento do próprio corpo; todo o resto é decidido aqui.
+//
+// Modos:
+//  - equipe:     todos veem os mesmos pedidos e cooperam.
+//  - individual: cada jogador tem os seus pedidos; vence quem ganhar mais.
+//  - van:        todos no mesmo carro, cada um com um papel (motorista, navegador, entregador, gerente).
 import {
   CENTROS, ESTRADAS, LIMITE, PONTOS_COLETA, PONTOS_ENTREGA, RAIO_PONTO, gerarCidade,
 } from '../../shared/cidade';
 import type {
-  EventoCaos, JogoTick, MsgServidor, PacoteInfo, PedidoInfo, Resultado, TipoCaos, TipoPacote,
+  EventoCaos, JogoTick, Modo, MsgServidor, PacoteInfo, PedidoInfo, RankItem, Resultado, TipoCaos, TipoPacote,
 } from '../../shared/protocolo';
 import type { Jogador, Sala } from './sala';
 
 const DURACAO = 360; // s de partida
 const CONTAGEM = 4; // s de contagem regressiva
 const GRAV = 22;
+const MAX_ATIVOS_VAN = 3; // pedidos aceitos ao mesmo tempo no modo van
+const OFERTA_MS = 28000; // quanto tempo uma oferta fica esperando o gerente
 const BASE: Record<TipoPacote, number> = { leve: 40, pesado: 90, fragil: 75, liquido: 65 };
 const SORTEIO: TipoPacote[] = ['leve', 'leve', 'leve', 'leve', 'pesado', 'pesado', 'fragil', 'fragil', 'liquido', 'liquido'];
 const CORES_PEDIDO = ['#ff5a5f', '#4a7bff', '#4cd964', '#ffb020', '#b061ff', '#2ec4d6'];
@@ -43,7 +50,7 @@ export class Jogo {
   private pacotes = new Map<number, Pacote>();
   private inicio = Date.now() + CONTAGEM * 1000;
   private fim = this.inicio + DURACAO * 1000;
-  private proxPedido = this.inicio;
+  private proxPedido = new Map<string, number>(); // por jogador (individual) ou "*" (equipe/van)
   private proxId = 1;
   private proxEvento = this.inicio + 30000;
   private idEvento = 1;
@@ -53,8 +60,10 @@ export class Jogo {
   private perdidos = 0;
   private acabou = false;
   private stats = new Map<string, Stats>();
+  /** Pose da van (modo van): vem do cliente do motorista enquanto ele não está a pé. */
+  private van = { p: [0, 1, -10], q: [0, 0, 0, 1], v: [0, 0, 0] };
 
-  constructor(private sala: Sala) {
+  constructor(private sala: Sala, readonly modo: Modo) {
     for (const j of sala.jogadores.values()) this.stat(j);
   }
 
@@ -68,6 +77,15 @@ export class Jogo {
     this.sala.enviarTodos(m);
   }
 
+  private motorista(): Jogador | undefined {
+    return [...this.sala.jogadores.values()].find((j) => j.papeis.includes('motorista'));
+  }
+
+  /** Posição que vale para o jogador: no modo van, quem está dentro da van usa a posição da van. */
+  private posDe(j: Jogador): number[] {
+    return this.modo === 'van' && !j.aPe ? this.van.p : j.p;
+  }
+
   // ---------------------------------------------------------------------------
   // Laço (chamado ~15x/s pela sala)
   // ---------------------------------------------------------------------------
@@ -77,12 +95,18 @@ export class Jogo {
     if (agora < this.inicio) return;
     if (agora >= this.fim) return this.terminar();
 
-    // Pedidos vencidos viram "perdidos"
-    for (const p of [...this.pedidos]) if (agora >= p.prazoFim) this.perder(p.id, 'perdido');
-    if (agora >= this.proxPedido && this.pedidos.length < 2 + this.sala.jogadores.size) {
-      this.novoPedido(agora);
-      this.proxPedido = agora + rnd(9000, 15000);
+    // A van segue o motorista (enquanto ele não desce a pé, caso seja também o entregador)
+    if (this.modo === 'van') {
+      const m = this.motorista();
+      if (m && !m.aPe && m.temEstado) this.van = { p: m.p, q: m.q, v: m.v };
     }
+
+    // Pedidos vencidos viram "perdidos"; ofertas não aceitas somem
+    for (const p of [...this.pedidos]) {
+      if (p.estado === 'oferta' && agora >= p.ofertaFim) this.pedidos = this.pedidos.filter((x) => x.id !== p.id);
+      else if (p.estado === 'ativo' && agora >= p.prazoFim) this.perder(p.id, 'perdido');
+    }
+    this.gerarPedidos(agora);
 
     for (const pk of [...this.pacotes.values()]) {
       if (pk.estado === 'carregado') {
@@ -91,9 +115,12 @@ export class Jogo {
           this.soltar(pk, [0, 0, 0]);
           continue;
         }
-        pk.pos = [d.p[0], d.p[1] + 1.8, d.p[2]];
+        const p = this.posDe(d);
+        pk.pos = [p[0], p[1] + 1.8, p[2]];
         const alvo = PONTOS_ENTREGA[pk.pedido.entrega];
-        if (dist2d(d.p[0], d.p[2], alvo.x, alvo.z) < RAIO_PONTO + 1) this.entregar(pk);
+        // No modo van, só o entregador a pé entrega
+        const podeEntregar = this.modo !== 'van' || d.aPe;
+        if (podeEntregar && dist2d(p[0], p[2], alvo.x, alvo.z) < RAIO_PONTO + 1) this.entregar(pk);
       } else if (pk.estado === 'livre') {
         this.simular(pk, dt);
         const alvo = PONTOS_ENTREGA[pk.pedido.entrega];
@@ -106,6 +133,28 @@ export class Jogo {
     else if (this.evento && agora >= this.evento.fim) {
       this.evento = null;
       this.proxEvento = agora + rnd(18000, 32000);
+    }
+  }
+
+  private gerarPedidos(agora: number) {
+    if (this.modo === 'individual') {
+      for (const j of this.sala.jogadores.values()) {
+        const meus = this.pedidos.filter((p) => p.dono === j.id).length;
+        if (meus < 2 && agora >= (this.proxPedido.get(j.id) ?? 0)) {
+          this.novoPedido(agora, j.id, 'ativo');
+          this.proxPedido.set(j.id, agora + rnd(9000, 14000));
+        }
+      }
+    } else if (this.modo === 'van') {
+      // Ofertas para o gerente decidir
+      const ofertas = this.pedidos.filter((p) => p.estado === 'oferta').length;
+      if (ofertas < 3 && agora >= (this.proxPedido.get('*') ?? 0)) {
+        this.novoPedido(agora, null, 'oferta');
+        this.proxPedido.set('*', agora + rnd(7000, 11000));
+      }
+    } else if (this.pedidos.length < 2 + this.sala.jogadores.size && agora >= (this.proxPedido.get('*') ?? 0)) {
+      this.novoPedido(agora, null, 'ativo');
+      this.proxPedido.set('*', agora + rnd(9000, 15000));
     }
   }
 
@@ -126,13 +175,25 @@ export class Jogo {
       pacotes,
       evento: this.evento,
       dinheiroPartida: this.dinheiro,
+      modo: this.modo,
+      ranking: this.ranking(),
     };
+  }
+
+  private ranking(): RankItem[] {
+    return [...this.sala.jogadores.values()]
+      .map((j) => {
+        const s = this.stat(j);
+        return { id: j.id, nome: j.nome, cor: j.cor, dinheiro: s.dinheiro, entregas: s.entregas };
+      })
+      .sort((a, b) => b.dinheiro - a.dinheiro);
   }
 
   // ---------------------------------------------------------------------------
   // Pedidos e pacotes
   // ---------------------------------------------------------------------------
-  private novoPedido(agora: number) {
+  private novoPedido(agora: number, dono: string | null, estado: 'oferta' | 'ativo') {
+    // Evita repetir uma coleta que já está em uso
     const usados = new Set(this.pedidos.map((p) => p.coleta));
     const livres = PONTOS_COLETA.map((_, i) => i).filter((i) => !usados.has(i));
     if (livres.length === 0) return;
@@ -143,7 +204,8 @@ export class Jogo {
     const d = dist2d(c.x, c.z, e.x, e.z);
     const tipo = SORTEIO[Math.floor(Math.random() * SORTEIO.length)];
     const id = this.proxId++;
-    const prazoTotal = (28 + d / 5) * 1000;
+    // No modo van a equipe anda a pé e troca de papéis: prazo mais folgado
+    const prazoTotal = (28 + d / 5) * (this.modo === 'van' ? 1.5 : 1) * 1000;
     const pedido: PedidoInfo = {
       id, tipo, coleta, entrega,
       prazoFim: agora + prazoTotal,
@@ -151,12 +213,45 @@ export class Jogo {
       base: Math.round(BASE[tipo] + d * 0.5),
       letra: String.fromCharCode(65 + ((id - 1) % 26)),
       cor: CORES_PEDIDO[(id - 1) % CORES_PEDIDO.length],
+      dono,
+      estado,
+      ofertaFim: estado === 'oferta' ? agora + OFERTA_MS : 0,
     };
     this.pedidos.push(pedido);
-    this.pacotes.set(id, {
-      id, tipo, pedido, estado: 'coleta', dono: null, ultimo: null,
+    if (estado === 'ativo') this.criarPacote(pedido);
+  }
+
+  private criarPacote(pedido: PedidoInfo) {
+    const c = PONTOS_COLETA[pedido.coleta];
+    this.pacotes.set(pedido.id, {
+      id: pedido.id, tipo: pedido.tipo, pedido, estado: 'coleta', dono: null, ultimo: null,
       pos: [c.x, 0.9, c.z], vel: [0, 0, 0], integ: 100,
     });
+  }
+
+  /** Modo van: o gerente aceita uma oferta e ela vira pedido ativo. */
+  aceitar(j: Jogador, id: number) {
+    if (this.modo !== 'van' || this.acabou || !j.papeis.includes('gerente')) return;
+    const p = this.pedidos.find((x) => x.id === id && x.estado === 'oferta');
+    if (!p) return;
+    if (this.pedidos.filter((x) => x.estado === 'ativo').length >= MAX_ATIVOS_VAN) return;
+    p.estado = 'ativo';
+    p.ofertaFim = 0;
+    p.prazoFim = Date.now() + p.prazoTotal;
+    this.criarPacote(p);
+  }
+
+  /** Modo van: o entregador desce ou sobe da van. */
+  van_(j: Jogador, acao: 'sair' | 'entrar') {
+    if (this.modo !== 'van' || this.acabou || !j.papeis.includes('entregador')) return;
+    if (acao === 'sair') {
+      if (j.aPe) return;
+      const vel = Math.hypot(this.van.v[0], this.van.v[2]);
+      if (vel > 4) return; // só desce com a van quase parada
+      j.aPe = true;
+    } else if (j.aPe && dist2d(j.p[0], j.p[2], this.van.p[0], this.van.p[2]) < 7) {
+      j.aPe = false;
+    }
   }
 
   private remover(pk: Pacote) {
@@ -260,19 +355,31 @@ export class Jogo {
     return [...this.pacotes.values()].filter((p) => p.dono === id);
   }
 
+  /** Pacotes que sofrem com o veículo de `j`: no modo van, os de quem está dentro da van. */
+  private cargaNoVeiculo(j: Jogador) {
+    if (this.modo !== 'van') return this.cargaDe(j.id);
+    return [...this.pacotes.values()].filter((p) => {
+      const d = p.dono ? this.sala.jogadores.get(p.dono) : undefined;
+      return !!d && !d.aPe;
+    });
+  }
+
   /** Tecla E: pega um pacote próximo; se já está carregando, passa para um amigo ou arremessa. */
   acao(j: Jogador) {
     if (this.acabou || Date.now() < this.inicio) return;
+    if (this.modo === 'van' && (!j.papeis.includes('entregador') || !j.aPe)) return;
     const cap = 1 + this.sala.upgrades.capacidade;
     const minhas = this.cargaDe(j.id);
+    const p0 = this.posDe(j);
 
     if (minhas.length < cap) {
       let melhor: Pacote | null = null;
       let md = Infinity;
       for (const pk of this.pacotes.values()) {
         if (pk.estado === 'carregado') continue;
+        if (this.modo === 'individual' && pk.pedido.dono !== j.id) continue; // cada um com os seus
         const alcance = pk.estado === 'coleta' ? RAIO_PONTO + 1.5 : 5.5;
-        const d = dist2d(j.p[0], j.p[2], pk.pos[0], pk.pos[2]);
+        const d = dist2d(p0[0], p0[2], pk.pos[0], pk.pos[2]);
         if (d < alcance && d < md) {
           md = d;
           melhor = pk;
@@ -288,19 +395,21 @@ export class Jogo {
     }
     if (minhas.length === 0) return;
 
-    // Passar para um amigo próximo que tenha espaço
-    for (const o of this.sala.jogadores.values()) {
-      if (o.id === j.id || !o.temEstado) continue;
-      if (dist2d(j.p[0], j.p[2], o.p[0], o.p[2]) < 8 && this.cargaDe(o.id).length < cap) {
-        const pk = minhas[0];
-        pk.dono = o.id;
-        pk.ultimo = o.id;
-        this.fx({ t: 'fx', k: 'pegou', x: o.p[0], y: o.p[1] + 1.5, z: o.p[2], id: o.id });
-        return;
+    // Passar para um amigo próximo (só no modo equipe)
+    if (this.modo === 'equipe') {
+      for (const o of this.sala.jogadores.values()) {
+        if (o.id === j.id || !o.temEstado) continue;
+        if (dist2d(j.p[0], j.p[2], o.p[0], o.p[2]) < 8 && this.cargaDe(o.id).length < cap) {
+          const pk = minhas[0];
+          pk.dono = o.id;
+          pk.ultimo = o.id;
+          this.fx({ t: 'fx', k: 'pegou', x: o.p[0], y: o.p[1] + 1.5, z: o.p[2], id: o.id });
+          return;
+        }
       }
     }
 
-    // Arremessa para a frente, somando a velocidade do veículo
+    // Arremessa para a frente, somando a velocidade
     const [qx, qy, qz, qw] = j.q;
     let fx = 2 * (qx * qz + qw * qy);
     let fz = 1 - 2 * (qx * qx + qy * qy);
@@ -308,7 +417,7 @@ export class Jogo {
     fx /= n;
     fz /= n;
     const pk = minhas[minhas.length - 1];
-    pk.pos = [j.p[0] + fx * 2.4, j.p[1] + 1.6, j.p[2] + fz * 2.4];
+    pk.pos = [p0[0] + fx * 2.4, p0[1] + 1.6, p0[2] + fz * 2.4];
     this.soltar(pk, [j.v[0] + fx * 13, 6.5, j.v[2] + fz * 13]);
     pk.ultimo = j.id;
   }
@@ -317,10 +426,11 @@ export class Jogo {
   impacto(j: Jogador, g: number) {
     if (!Number.isFinite(g) || this.acabou) return;
     g = Math.min(g, 25);
-    for (const pk of this.cargaDe(j.id)) {
+    const p = this.posDe(j);
+    for (const pk of this.cargaNoVeiculo(j)) {
       if (pk.tipo === 'leve' && g >= 5.5) {
         // Pacote leve "cai fácil": sai voando
-        pk.pos = [j.p[0], j.p[1] + 1.8, j.p[2]];
+        pk.pos = [p[0], p[1] + 1.8, p[2]];
         this.soltar(pk, [rnd(-3, 3), 5, rnd(-3, 3)]);
         this.fx({ t: 'fx', k: 'caiu', x: pk.pos[0], y: pk.pos[1], z: pk.pos[2], id: j.id });
       } else if (pk.tipo === 'fragil' && g > 3) {
@@ -336,7 +446,7 @@ export class Jogo {
   /** Balanço do carro (curvas/freadas bruscas): líquido derrama aos poucos. */
   balanco(j: Jogador, v: number) {
     if (!Number.isFinite(v) || v <= 0 || this.acabou) return;
-    for (const pk of this.cargaDe(j.id)) {
+    for (const pk of this.cargaNoVeiculo(j)) {
       if (pk.tipo !== 'liquido') continue;
       pk.integ -= Math.min(v, 20) * 0.5;
       this.verificarDestruido(pk);
@@ -346,7 +456,10 @@ export class Jogo {
   aoSair(id: string) {
     for (const pk of this.cargaDe(id)) {
       const d = this.sala.jogadores.get(id);
-      if (d) pk.pos = [d.p[0], d.p[1] + 1.5, d.p[2]];
+      if (d) {
+        const p = this.posDe(d);
+        pk.pos = [p[0], p[1] + 1.5, p[2]];
+      }
       this.soltar(pk, [0, 3, 0]);
     }
   }
@@ -401,6 +514,7 @@ export class Jogo {
     }
     if (this.perdidos > 0) estatistica += ` ${this.perdidos} encomenda${this.perdidos > 1 ? 's' : ''} não chegou${this.perdidos > 1 ? 'ram' : ''} ao destino.`;
     const r: Resultado = {
+      modo: this.modo,
       dinheiroTotal: this.dinheiro,
       entregas: this.entregas,
       perdidos: this.perdidos,

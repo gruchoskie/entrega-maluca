@@ -34,11 +34,24 @@ Scripts úteis: `npm run dev:servidor`, `npm run dev:cliente`, `npm run build` (
 | Pular / freio de mão | Espaço (segure = derrapa) | botão laranja |
 | Pegar / passar / arremessar pacote | E | botão 📦 |
 | Buzina | C | botão 📣 |
+| Descer/subir da van (modo "Mesmo carro") | F | botão 🚐 |
+| Aceitar pedido (gerente, modo "Mesmo carro") | 1, 2, 3 ou clique | toque no botão "Aceitar" |
 | Câmera | arrastar o mouse | arrastar o dedo |
 | Voltar à largada | R | — |
 
 **Pegar (E):** perto do pilar de luz 📦 pega a encomenda. Com a mão cheia: se há um amigo por perto, **passa**
 para ele; senão, **arremessa** (dá para acertar a zona de entrega de longe!).
+
+## Modos de jogo (o anfitrião escolhe no lobby)
+
+- **🤝 Equipe:** todos veem os mesmos pedidos e cooperam; cada um dirige o seu veículo.
+- **🏁 Individual:** cada jogador tem os seus próprios pedidos (mesma cidade, mesmo mapa). Ranking ao vivo e vence quem ganhar mais.
+- **🚐 Mesmo carro:** uma única van, e cada jogador cumpre um papel:
+  - **🚗 Motorista:** só dirige. Não tem minimapa nem setas: depende do navegador.
+  - **🗺️ Navegador:** vê o minimapa grande, com ruas nomeadas (letras e números) para "cantar" onde virar.
+  - **🏃 Entregador:** desce da van (F) com ela parada, pega o pacote a pé (E), volta para a van e, no destino, desce e entrega a pé.
+  - **📋 Gerente:** vê as ofertas de pedido e decide quais aceitar (até 3 em andamento); vê os pontos na rua, mas não tem minimapa.
+  Com menos de 4 jogadores os papéis se combinam (2: dirige+navega / desce+aceita; 3: dirige / navega+aceita / desce; 1: tudo).
 
 ## Regras do jogo
 

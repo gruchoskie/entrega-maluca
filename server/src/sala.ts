@@ -5,13 +5,16 @@ import { Jogo } from './jogo';
 import {
   BUZINAS,
   CHAPEUS,
+  MODOS,
   VEICULOS,
   type Buzina,
   type Chapeu,
   type Fase,
   type JogadorInfo,
   type MsgCliente,
+  type Modo,
   type MsgServidor,
+  type Papel,
   type PerfilMsg,
   type SalaInfo,
 } from '../../shared/protocolo';
@@ -23,6 +26,7 @@ export interface Jogador extends JogadorInfo {
   v: number[];
   cap: number; // capotadas
   temEstado: boolean;
+  aPe: boolean; // modo van: o entregador desceu da van
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -57,6 +61,7 @@ export class Sala {
   upgrades = { velocidade: 0, estabilidade: 0, capacidade: 0 };
   cosmeticos: SalaInfo['cosmeticos'] = { chapeus: ['nenhum'], buzinas: ['padrao'] };
   jogo: Jogo | null = null;
+  modo: Modo = 'equipe';
   private ultimoTick = Date.now();
 
   constructor(readonly codigo: string) {}
@@ -70,8 +75,9 @@ export class Sala {
       codigo: this.codigo,
       anfitriao: this.anfitriao,
       fase: this.fase,
-      jogadores: [...this.jogadores.values()].map(({ id, nome, cor, veic, chapeu, buzina, slot }) => ({
-        id, nome, cor, veic, chapeu, buzina, slot,
+      modo: this.modo,
+      jogadores: [...this.jogadores.values()].map(({ id, nome, cor, veic, chapeu, buzina, slot, papeis }) => ({
+        id, nome, cor, veic, chapeu, buzina, slot, papeis,
       })),
       dinheiro: this.dinheiro,
       upgrades: this.upgrades,
@@ -99,7 +105,12 @@ export class Sala {
     let slot = 0;
     while (usados.has(slot)) slot++;
     const p = validarPerfil(perfil, undefined, this.cosmeticos);
-    const j: Jogador = { id, ws, slot, ...p, p: [0, 1, 0], q: [0, 0, 0, 1], v: [0, 0, 0], cap: 0, temEstado: false };
+    const j: Jogador = {
+      id, ws, slot, ...p, p: [0, 1, 0], q: [0, 0, 0, 1], v: [0, 0, 0], cap: 0, temEstado: false,
+      aPe: false,
+      // Quem entra no meio de uma partida em modo van vira navegador (ajuda a achar o caminho)
+      papeis: this.fase === 'jogo' && this.modo === 'van' ? ['navegador'] : [],
+    };
     this.jogadores.set(id, j);
     if (!this.anfitriao) this.anfitriao = id;
     this.enviar(j, { t: 'bemvindo', id, sala: this.info() });
@@ -135,12 +146,25 @@ export class Sala {
       case 'buzina':
         this.enviarTodos({ t: 'buzina', id: j.id });
         break;
-      case 'iniciar':
-        if (j.id === this.anfitriao && this.fase === 'lobby') {
-          this.fase = 'jogo';
-          this.jogo = new Jogo(this);
+      case 'modo':
+        if (j.id === this.anfitriao && this.fase === 'lobby' && MODOS.includes(m.modo)) {
+          this.modo = m.modo;
           this.enviarSala();
         }
+        break;
+      case 'iniciar':
+        if (j.id === this.anfitriao && this.fase === 'lobby') {
+          this.atribuirPapeis();
+          this.fase = 'jogo';
+          this.jogo = new Jogo(this, this.modo);
+          this.enviarSala();
+        }
+        break;
+      case 'aceitar':
+        if (this.fase === 'jogo') this.jogo?.aceitar(j, Number(m.id));
+        break;
+      case 'van':
+        if (this.fase === 'jogo') this.jogo?.van_(j, m.acao === 'entrar' ? 'entrar' : 'sair');
         break;
       case 'voltar':
         if (j.id === this.anfitriao && this.fase === 'resultado') {
@@ -164,6 +188,25 @@ export class Sala {
       default:
         break;
     }
+  }
+
+  /**
+   * Modo van: reparte os papéis pelo número de jogadores.
+   * 1: tudo com você · 2: dirige+navega / desce+aceita · 3: dirige / navega+aceita / desce · 4: um papel cada.
+   */
+  private atribuirPapeis() {
+    const lista = [...this.jogadores.values()].sort((a, b) => a.slot - b.slot);
+    const tabela: Papel[][][] = [
+      [],
+      [['motorista', 'navegador', 'entregador', 'gerente']],
+      [['motorista', 'navegador'], ['entregador', 'gerente']],
+      [['motorista'], ['navegador', 'gerente'], ['entregador']],
+      [['motorista'], ['navegador'], ['entregador'], ['gerente']],
+    ];
+    lista.forEach((j, i) => {
+      j.papeis = this.modo === 'van' ? tabela[lista.length][i] : [];
+      j.aPe = false;
+    });
   }
 
   /** Compra na loja da equipe: "up:velocidade", "chapeu:coroa", "buzina:patinho". */
@@ -205,7 +248,7 @@ export class Sala {
     for (const p of this.jogadores.values()) {
       if (!p.temEstado) continue;
       ids.push(p.id);
-      j.push([...p.p, ...p.q, ...p.v, p.cap].map(r2));
+      j.push([...p.p, ...p.q, ...p.v, p.cap, p.aPe ? 1 : 0].map(r2));
     }
     this.enviarTodos({ t: 'tick', agora, ids, j, jogo: this.fase === 'jogo' ? this.jogo?.tickInfo() : undefined });
   }

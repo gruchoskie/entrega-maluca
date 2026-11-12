@@ -1,14 +1,24 @@
 // Interface em HTML: menu inicial, painel do lobby e botão de mudo. (HUD e resultados: Fase 4.)
 import { NIVEL_MAX, PRECO_BUZINA, PRECO_CHAPEU, PRECO_UPGRADE } from '../../../shared/constantes';
 import {
-  BUZINAS, CHAPEUS, CORES, VEICULOS,
-  type Buzina, type Chapeu, type PerfilMsg, type SalaInfo, type TipoVeiculo, type Upgrades,
+  BUZINAS, CHAPEUS, CORES, MODOS, VEICULOS,
+  type Buzina, type Chapeu, type Modo, type Papel, type PerfilMsg, type SalaInfo, type TipoVeiculo, type Upgrades,
 } from '../../../shared/protocolo';
+import { INFO_PAPEL, NOME_MODO } from './hud';
+
+/** Mesma distribuição de papéis do servidor (para mostrar a prévia no lobby). */
+const DISTRIBUICAO: Papel[][][] = [
+  [],
+  [['motorista', 'navegador', 'entregador', 'gerente']],
+  [['motorista', 'navegador'], ['entregador', 'gerente']],
+  [['motorista'], ['navegador', 'gerente'], ['entregador']],
+  [['motorista'], ['navegador'], ['entregador'], ['gerente']],
+];
 import { buzinar, definirMudo, estaMudo } from '../audio/audio';
 import { Previa } from './previa';
 
 const ROTULO_CHAPEU: Record<Chapeu, string> = {
-  nenhum: 'Sem chapéu', cartola: '🎩 Cartola', cowboy: '🤠 Cowboy', coroa: '👑 Coroa', festa: '🥳 Festa',
+  nenhum: '🚫 Sem chapéu', cartola: '🎩 Cartola', cowboy: '🤠 Cowboy', coroa: '👑 Coroa', festa: '🥳 Festa',
 };
 const ROTULO_BUZINA: Record<Buzina, string> = {
   padrao: '📯 Padrão', patinho: '🦆 Patinho', caminhao: '🚛 Caminhão', melodia: '🎶 Melodia',
@@ -73,7 +83,9 @@ export class Ui {
   aoMudarPerfil: (p: Partial<PerfilMsg>) => void = () => {};
   aoIniciar: () => void = () => {};
   aoComprar: (item: string) => void = () => {};
+  aoModo: (m: Modo) => void = () => {};
   private previa: Previa | null = null;
+  private lojaPrevia: Previa | null = null;
   private lojaAberta = false;
   private ultimaSala: SalaInfo | null = null;
 
@@ -303,42 +315,56 @@ export class Ui {
   }
 
   // ---------------------------------------------------------------------------
-  // Painel do lobby (a cidade fica livre ao fundo: dá para dirigir esperando)
+  // Lobby: código da sala, jogadores, modo de jogo e visual (a cidade fica livre ao fundo)
   // ---------------------------------------------------------------------------
   atualizarLobby(sala: SalaInfo, meuId: string) {
     let p = document.getElementById('lobby');
     if (!p) {
       p = document.createElement('div');
       p.id = 'lobby';
-      p.className = 'painel';
+      p.className = 'painel lobby-novo';
       this.raiz.appendChild(p);
     }
     this.ultimaSala = sala;
+    const ehAnf = meuId === sala.anfitriao;
     const link = `${location.origin}${location.pathname}?sala=${sala.codigo}`;
+    const cartoes = sala.jogadores
+      .map(
+        (j) => `<div class="jog${j.id === meuId ? ' eu' : ''}"><span class="avatar" style="background:${j.cor}">${NOME_VEICULO[j.veic].split(' ')[0]}</span>
+          <div><b>${escapar(j.nome)}</b><small>${j.id === meuId ? 'Você' : 'Amigo'}${j.id === sala.anfitriao ? ' · 👑 anfitrião' : ''}</small></div></div>`,
+      )
+      .join('');
+    const vagas = Array.from({ length: Math.max(0, 4 - sala.jogadores.length) }, () => '<div class="jog vazio"><span class="avatar">＋</span><div><small>Aguardando amigo…</small></div></div>').join('');
+    const modos = MODOS.map(
+      (m) => `<button class="modo${sala.modo === m ? ' sel' : ''}" data-modo="${m}" ${ehAnf ? '' : 'disabled'}><span>${NOME_MODO[m].icone}</span><b>${NOME_MODO[m].nome}</b></button>`,
+    ).join('');
+    const nomes = sala.jogadores.slice().sort((a, b) => a.slot - b.slot);
+    const papeisTxt =
+      sala.modo === 'van'
+        ? `<div class="papeis-previa"><b>Papéis com ${nomes.length} jogador${nomes.length > 1 ? 'es' : ''}:</b>${nomes
+            .map((j, i) => `<div>${escapar(j.nome)}: ${DISTRIBUICAO[nomes.length][i].map((r) => INFO_PAPEL[r].icone + ' ' + INFO_PAPEL[r].nome).join(' + ')}</div>`)
+            .join('')}</div>`
+        : '';
     p.innerHTML = `
-      <div class="cod">Sala <b>${sala.codigo}</b></div>
-      <button id="l-copiar" class="pequeno">🔗 Copiar convite</button>
-      <button id="l-loja" class="pequeno loja-btn">🛒 Loja · ${fmt(sala.dinheiro)}</button>
-      <ul id="l-lista">
-        ${sala.jogadores
-          .map(
-            (j) => `<li><span class="bolinha" style="background:${j.cor}"></span>
-              ${escapar(j.nome)}${j.id === meuId ? ' (você)' : ''}${j.id === sala.anfitriao ? ' 👑' : ''}
-              <small>${NOME_VEICULO[j.veic]}</small></li>`,
-          )
-          .join('')}
-      </ul>
+      <div class="lobby-topo">
+        <div><small>Código da sala</small><div class="cod-grande">${sala.codigo}</div></div>
+        <button id="l-copiar" class="pequeno">🔗 Copiar convite</button>
+      </div>
+      <div class="jogadores">${cartoes}${vagas}</div>
+      <div class="rotulo">Modo de jogo ${ehAnf ? '' : '<small>(escolhido pelo anfitrião)</small>'}</div>
+      <div class="modos">${modos}</div>
+      <p class="modo-texto">${NOME_MODO[sala.modo].texto}</p>${papeisTxt}
       <div class="rotulo">Seu visual</div>
       <div class="cores" id="l-cores"></div>
       <div class="veics" id="l-veic"></div>
-      <div class="dica-lobby">Dirija à vontade enquanto os amigos chegam. Compartilhe o link!</div>
-      ${
-        meuId === sala.anfitriao
-          ? '<button class="primario iniciar" id="l-iniciar">▶ Iniciar partida</button>'
-          : '<div class="dica-lobby">Aguardando o anfitrião iniciar…</div>'
-      }`;
+      <div class="lobby-acoes">
+        <button id="l-loja" class="loja-btn">🛒 Loja · ${fmt(sala.dinheiro)}</button>
+        ${ehAnf ? '<button class="primario iniciar" id="l-iniciar">▶ Iniciar partida</button>' : '<div class="dica-lobby">Aguardando o anfitrião iniciar…</div>'}
+      </div>
+      <div class="dica-lobby">Dirija à vontade enquanto os amigos chegam. Compartilhe o link!</div>`;
     this.desenharSeletores('l-cores', 'l-veic');
     document.getElementById('l-iniciar')?.addEventListener('click', () => this.aoIniciar());
+    p.querySelectorAll<HTMLButtonElement>('[data-modo]').forEach((b) => (b.onclick = () => this.aoModo(b.dataset.modo as Modo)));
     el('l-loja').onclick = () => {
       this.lojaAberta = true;
       this.desenharLoja();
@@ -360,10 +386,12 @@ export class Ui {
   }
 
   // ---------------------------------------------------------------------------
-  // Loja da equipe: upgrades (valem para todos) e cosméticos
+  // Loja da equipe: preview 3D do seu entregador + upgrades e cosméticos
   // ---------------------------------------------------------------------------
   private fecharLoja() {
     this.lojaAberta = false;
+    this.lojaPrevia?.destruir();
+    this.lojaPrevia = null;
     document.getElementById('tela-loja')?.remove();
   }
 
@@ -374,9 +402,22 @@ export class Ui {
     if (!t) {
       t = document.createElement('div');
       t.id = 'tela-loja';
-      t.className = 'tela';
+      t.className = 'tela menu';
+      t.innerHTML = `<div class="loja-grade">
+        <section class="cartao menu-previa"><div id="loja-previa" class="previa"></div>
+          <div class="info-veic"><h2 id="loja-nome"></h2><p>Veja como seu visual fica antes de equipar!</p><div class="carteira-badge" id="loja-carteira"></div></div></section>
+        <div class="cartao loja" id="loja-itens"></div></div>`;
       this.raiz.appendChild(t);
+      try {
+        this.lojaPrevia = new Previa(el('loja-previa'));
+      } catch {
+        this.lojaPrevia = null;
+      }
     }
+    this.lojaPrevia?.definir(this.perfil.veic, this.perfil.cor, this.perfil.chapeu);
+    el('loja-nome').textContent = NOME_VEICULO[this.perfil.veic];
+    el('loja-carteira').textContent = '💰 ' + fmt(sala.dinheiro) + ' na carteira da equipe';
+
     const pips = (n: number) => '●'.repeat(n) + '○'.repeat(NIVEL_MAX - n);
     const linhasUp = UPGRADES.map(({ chave, nome, desc }) => {
       const nivel = sala.upgrades[chave];
@@ -385,22 +426,24 @@ export class Ui {
       return `<div class="item-loja"><div><b>${nome}</b> <span class="pips">${pips(nivel)}</span><small>${desc}</small></div>
         <button data-item="up:${chave}" ${maximo || sala.dinheiro < preco ? 'disabled' : ''}>${maximo ? 'MÁXIMO' : fmt(preco)}</button></div>`;
     }).join('');
-    const botao = (tipo: 'chapeu' | 'buzina', id: string, rotulo: string, preco: number, tem: boolean, equipado: boolean) =>
-      tem
-        ? `<button class="cosm${equipado ? ' sel' : ''}" data-equipar="${tipo}:${id}">${rotulo}<small>${equipado ? 'Equipado' : 'Equipar'}</small></button>`
-        : `<button class="cosm" data-item="${tipo}:${id}" ${sala.dinheiro < preco ? 'disabled' : ''}>${rotulo}<small>${fmt(preco)}</small></button>`;
+    const botao = (tipo: 'chapeu' | 'buzina', id: string, rotulo: string, preco: number, tem: boolean, equipado: boolean) => {
+      const [ico, ...resto] = rotulo.split(' ');
+      const nome = resto.join(' ') || ico;
+      const emoji = resto.length ? ico : '🚫';
+      return tem
+        ? `<button class="cosm${equipado ? ' sel' : ''}" data-equipar="${tipo}:${id}"><span class="emoji">${emoji}</span>${nome}<small>${equipado ? '✔ Equipado' : 'Equipar'}</small></button>`
+        : `<button class="cosm bloq" data-item="${tipo}:${id}" ${sala.dinheiro < preco ? 'disabled' : ''}><span class="emoji">${emoji}</span>${nome}<small>🔒 ${fmt(preco)}</small></button>`;
+    };
     const chapeus = CHAPEUS.map((c) =>
       botao('chapeu', c, ROTULO_CHAPEU[c], PRECO_CHAPEU[c], sala.cosmeticos.chapeus.includes(c), this.perfil.chapeu === c)).join('');
     const buzinas = BUZINAS.map((b) =>
       botao('buzina', b, ROTULO_BUZINA[b], PRECO_BUZINA[b], sala.cosmeticos.buzinas.includes(b), this.perfil.buzina === b)).join('');
 
-    t.innerHTML = `<div class="cartao loja">
-      <h1>🛒 Loja da equipe</h1>
-      <div class="carteira">💰 ${fmt(sala.dinheiro)}</div>
-      <div class="rotulo">Melhorias do veículo (valem para toda a equipe)</div>${linhasUp}
+    el('loja-itens').innerHTML = `<h1>🛒 Loja da equipe</h1>
+      <div class="rotulo">Melhorias (valem para toda a equipe)</div>${linhasUp}
       <div class="rotulo">Chapéus</div><div class="grade">${chapeus}</div>
-      <div class="rotulo">Buzinas (toque para ouvir)</div><div class="grade">${buzinas}</div>
-      <button class="primario" id="loja-fechar">Fechar</button></div>`;
+      <div class="rotulo">Buzinas <small>(toque para ouvir)</small></div><div class="grade">${buzinas}</div>
+      <button class="primario" id="loja-fechar">Fechar</button>`;
     t.querySelectorAll<HTMLButtonElement>('[data-item]').forEach((b) => (b.onclick = () => this.aoComprar(b.dataset.item!)));
     t.querySelectorAll<HTMLButtonElement>('[data-equipar]').forEach((b) => {
       b.onclick = () => {

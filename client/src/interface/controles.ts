@@ -7,6 +7,7 @@ export interface EstadoControles {
   pegar: boolean; // pulso: apertou neste quadro
   buzina: boolean; // pulso: apertou neste quadro
   trocar: boolean; // pulso: trocar veículo (provisório até o lobby)
+  van: boolean; // pulso: descer/subir da van (modo "mesmo carro")
   camDX: number; // arrasto da câmera neste quadro (px)
   camDY: number;
 }
@@ -29,6 +30,7 @@ export class Controles {
   private pulsoPegar = false;
   private pulsoBuzina = false;
   private pulsoTrocar = false;
+  private pulsoVan = false;
   private camDX = 0;
   private camDY = 0;
 
@@ -59,10 +61,11 @@ export class Controles {
       pegar: this.pulsoPegar,
       buzina: this.pulsoBuzina,
       trocar: this.pulsoTrocar,
+      van: this.pulsoVan,
       camDX: this.camDX,
       camDY: this.camDY,
     };
-    this.pulsoPegar = this.pulsoBuzina = this.pulsoTrocar = false;
+    this.pulsoPegar = this.pulsoBuzina = this.pulsoTrocar = this.pulsoVan = false;
     this.camDX = this.camDY = 0;
     return estado;
   }
@@ -76,6 +79,7 @@ export class Controles {
       if (e.code === 'KeyE') this.pulsoPegar = true;
       if (e.code === 'KeyC') this.pulsoBuzina = true;
       if (e.code === 'KeyV') this.pulsoTrocar = true;
+      if (e.code === 'KeyF') this.pulsoVan = true;
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.teclas.delete(e.code));
@@ -165,6 +169,7 @@ export class Controles {
     botao('btn-pular', () => (this.pularToque = true), () => (this.pularToque = false));
     botao('btn-pegar', () => (this.pulsoPegar = true));
     botao('btn-buzina', () => (this.pulsoBuzina = true));
+    botao('btn-van', () => (this.pulsoVan = true));
   }
 }
 

@@ -103,6 +103,12 @@ export class Veiculo {
     this.montar(this.tipo, p.x, 0.3, p.z, this.rumo);
   }
 
+  /** Remove o veículo do mundo (corpo físico e malhas). */
+  destruir() {
+    this.fis.mundo.removeRigidBody(this.corpo);
+    this.objeto.parent?.remove(this.objeto);
+  }
+
   /** Pose física atual (para enviar pela rede). */
   snapshot() {
     const t = this.corpo.translation();
