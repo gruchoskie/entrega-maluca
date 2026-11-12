@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { CENTROS, ESTRADAS, LARG_RUA, LIMITE, TAM_BLOCO, gerarCidade } from '../../../shared/cidade';
 import type { Fisica } from '../fisica/fisica';
+import { criarFaixasPedestre, criarPostes, criarPredios } from './detalhes';
 import type { Mundo } from './mundo';
 import { aleatorio } from './mundo';
 
@@ -82,35 +83,10 @@ export function criarCenario(fis: Fisica, mundo: Mundo): Cenario {
   calcada.receiveShadow = true;
   cena.add(calcada);
 
-  // ---------- Prédios: 1 InstancedMesh, cor por instância, sombreado no vão ----------
-  const geoPredio = new THREE.BoxGeometry(1, 1, 1);
-  const pos = geoPredio.attributes.position;
-  const cores = new Float32Array(pos.count * 3);
-  for (let v = 0; v < pos.count; v++) {
-    const claro = pos.getY(v) > 0 ? 1 : 0.78; // base mais escura = volume
-    cores.set([claro, claro, claro], v * 3);
-  }
-  geoPredio.setAttribute('color', new THREE.BufferAttribute(cores, 3));
-  const predios = new THREE.InstancedMesh(
-    geoPredio,
-    new THREE.MeshLambertMaterial({ vertexColors: true }),
-    cidade.predios.length,
-  );
-  const telhados = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshLambertMaterial({ color: '#ffffff' }),
-    cidade.predios.length,
-  );
-  cidade.predios.forEach((b, k) => {
-    predios.setMatrixAt(k, _m.compose(_p.set(b.x, b.h / 2, b.z), _q.identity(), _s.set(b.w, b.h, b.d)));
-    predios.setColorAt(k, cor.set(b.cor));
-    telhados.setMatrixAt(k, _m.compose(_p.set(b.x, b.h + 0.3, b.z), _q.identity(), _s.set(b.w + 0.6, 0.6, b.d + 0.6)));
-    telhados.setColorAt(k, cor.set(b.cor).multiplyScalar(0.6));
-  });
-  _s.set(1, 1, 1);
-  predios.castShadow = predios.receiveShadow = true;
-  telhados.castShadow = true;
-  cena.add(predios, telhados);
+  // ---------- Prédios com janelas, portas e toldos; faixas de pedestre; postes de luz ----------
+  criarPredios(cena, cidade.predios);
+  criarFaixasPedestre(cena);
+  criarPostes(fis, cena);
 
   // ---------- Rampas das praças ----------
   for (const r of cidade.rampas) criarRampa(fis, cena, r.w, r.h, r.l, r.x, r.z, r.yaw);

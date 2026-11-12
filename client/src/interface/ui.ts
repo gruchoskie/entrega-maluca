@@ -5,6 +5,7 @@ import {
   type Buzina, type Chapeu, type PerfilMsg, type SalaInfo, type TipoVeiculo, type Upgrades,
 } from '../../../shared/protocolo';
 import { buzinar, definirMudo, estaMudo } from '../audio/audio';
+import { Previa } from './previa';
 
 const ROTULO_CHAPEU: Record<Chapeu, string> = {
   nenhum: 'Sem chapéu', cartola: '🎩 Cartola', cowboy: '🤠 Cowboy', coroa: '👑 Coroa', festa: '🥳 Festa',
@@ -25,6 +26,16 @@ export const NOME_VEICULO: Record<TipoVeiculo, string> = {
 };
 
 const CHAVE = 'em-perfil';
+
+/** Descrição e características (1 a 5) mostradas na escolha do veículo. */
+const DADOS_VEICULO: Record<TipoVeiculo, { texto: string; vel: number; agil: number; estab: number }> = {
+  scooter: { texto: 'Rápida e ágil, ótima para entregas urgentes. Mas capota com facilidade!', vel: 5, agil: 4, estab: 2 },
+  van: { texto: 'Grandalhona e estável: aguenta batidas, mas faz curvas como um navio.', vel: 3, agil: 2, estab: 5 },
+  carrinho: { texto: 'Pequeno, quicante e super ágil. Perfeito para quem gosta de bagunça!', vel: 2, agil: 5, estab: 2 },
+};
+
+const APELIDOS = ['Zé Pizza', 'Moto Maluca', 'Dona Pressa', 'Rei do Frete', 'Capota Mole', 'Sr. Buzina', 'Rodinha', 'Turbo Zé', 'Pé de Chumbo', 'Frete Veloz', 'Tia Entrega', 'Doido do Pacote'];
+const sortearApelido = () => APELIDOS[Math.floor(Math.random() * APELIDOS.length)];
 
 export function carregarPerfil(): PerfilMsg {
   const padrao: PerfilMsg = { nome: '', cor: CORES[0], veic: 'scooter', chapeu: 'nenhum', buzina: 'padrao' };
@@ -62,6 +73,7 @@ export class Ui {
   aoMudarPerfil: (p: Partial<PerfilMsg>) => void = () => {};
   aoIniciar: () => void = () => {};
   aoComprar: (item: string) => void = () => {};
+  private previa: Previa | null = null;
   private lojaAberta = false;
   private ultimaSala: SalaInfo | null = null;
 
@@ -159,17 +171,26 @@ export class Ui {
     const div = document.createElement('div');
     div.className = 'tela';
     div.id = 'tela-menu';
+    div.classList.add('menu');
     div.innerHTML = `
-      <div class="cartao">
-        <h1>🚚 Entrega Maluca</h1>
+     <div class="menu-grade">
+      <section class="cartao menu-previa">
+        <div id="m-previa" class="previa"></div>
+        <div id="m-info" class="info-veic"></div>
+      </section>
+      <div class="cartao menu-form">
+        <div class="logo"><span class="logo-ico">🚚</span><h1>Entrega<br>Maluca</h1></div>
         <p class="sub">Até 4 amigos, uma cidade e muitas encomendas!</p>
-        <label class="campo">Apelido
-          <input id="m-nome" maxlength="14" placeholder="Seu apelido" autocomplete="off" />
+        <label class="campo">Seu apelido
+          <span class="nome-linha">
+            <input id="m-nome" maxlength="14" placeholder="Como te chamam?" autocomplete="off" />
+            <button type="button" id="m-sorteio" title="Sortear um apelido" aria-label="Sortear apelido">🎲</button>
+          </span>
         </label>
-        <div class="rotulo">Cor</div>
+        <div class="rotulo">Cor do veículo</div>
         <div class="cores" id="m-cores"></div>
-        <div class="rotulo">Veículo</div>
-        <div class="veics" id="m-veic"></div>
+        <div class="rotulo">Escolha seu veículo</div>
+        <div class="veic-cards" id="m-veic"></div>
         <div class="acoes">
           ${
             codigoUrl
@@ -185,11 +206,23 @@ export class Ui {
           }
         </div>
         <div class="erro" id="m-erro"></div>
-      </div>`;
+      </div>
+     </div>`;
     this.raiz.appendChild(div);
 
     const nome = el<HTMLInputElement>('m-nome');
-    nome.value = this.perfil.nome;
+    nome.value = this.perfil.nome || sortearApelido();
+    el('m-sorteio').onclick = () => {
+      nome.value = sortearApelido();
+      nome.focus();
+    };
+    // Preview 3D (se o WebGL falhar, o menu continua funcionando sem ele)
+    try {
+      this.previa = new Previa(el('m-previa'));
+    } catch {
+      this.previa = null;
+    }
+    this.atualizarPrevia();
     const coletar = (): PerfilMsg => {
       this.perfil.nome = nome.value.trim() || 'Entregador' + Math.floor(Math.random() * 90 + 10);
       salvarPerfil(this.perfil);
@@ -213,7 +246,21 @@ export class Ui {
   }
 
   esconderMenu() {
+    this.previa?.destruir();
+    this.previa = null;
     document.getElementById('tela-menu')?.remove();
+  }
+
+  /** Atualiza o preview 3D e o texto/barras do veículo escolhido (só existem no menu). */
+  private atualizarPrevia() {
+    const info = document.getElementById('m-info');
+    if (!info) return;
+    this.previa?.definir(this.perfil.veic, this.perfil.cor);
+    const d = DADOS_VEICULO[this.perfil.veic];
+    const barra = (nome: string, v: number) =>
+      `<div class="stat"><span>${nome}</span><i><b style="width:${v * 20}%"></b></i></div>`;
+    info.innerHTML = `<h2>${NOME_VEICULO[this.perfil.veic]}</h2><p>${d.texto}</p>
+      ${barra('Velocidade', d.vel)}${barra('Agilidade', d.agil)}${barra('Estabilidade', d.estab)}`;
   }
 
   /** Cores + veículos (usado no menu e no lobby). */
@@ -230,20 +277,26 @@ export class Ui {
         salvarPerfil(this.perfil);
         this.aoMudarPerfil({ cor });
         this.desenharSeletores(idCores, idVeic);
+        this.atualizarPrevia();
       };
       c.appendChild(b);
     }
     const v = el(idVeic);
     v.innerHTML = '';
+    const cartoes = idVeic === 'm-veic'; // no menu: cartões grandes; no lobby: botões pequenos
     for (const tipo of VEICULOS) {
       const b = document.createElement('button');
-      b.className = 'veic' + (tipo === this.perfil.veic ? ' sel' : '');
-      b.textContent = NOME_VEICULO[tipo];
+      b.className = (cartoes ? 'veic-card' : 'veic') + (tipo === this.perfil.veic ? ' sel' : '');
+      if (cartoes) {
+        const [icone, nome] = NOME_VEICULO[tipo].split(' ');
+        b.innerHTML = `<span class="emoji">${icone}</span><b>${nome}</b>`;
+      } else b.textContent = NOME_VEICULO[tipo];
       b.onclick = () => {
         this.perfil.veic = tipo;
         salvarPerfil(this.perfil);
         this.aoMudarPerfil({ veic: tipo });
         this.desenharSeletores(idCores, idVeic);
+        this.atualizarPrevia();
       };
       v.appendChild(b);
     }

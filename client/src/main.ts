@@ -392,6 +392,7 @@ async function iniciar() {
     for (const r of remotos.values()) r.atualizarVisual(dt);
     pacotesVis.atualizar(dt, { meuId, veiculo, remotos });
     marcadores.atualizar(dt);
+    mundo.atualizar(dt);
     transito.atualizarVisual();
     caos.atualizar(dt, veiculo, camera.camera.position);
     // Poeira de derrapagem nas rodas traseiras
